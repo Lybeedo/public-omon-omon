@@ -53,6 +53,11 @@ input bool   InpSkipUSHoliday  = true;
 //+------------------------------------------------------------------+
 //| GLOBAL VARIABLES                                                 |
 //+------------------------------------------------------------------+
+// Auto-detect digit & pip (works for all pairs: XAUUSD 2-digit, EURUSD 5-digit, USDJPY 3-digit)
+#define GDigits ((int)MarketInfo(_Symbol, MODE_DIGITS))
+#define GPoint  (MarketInfo(_Symbol, MODE_POINT))
+#define GPip    ((GDigits == 3 || GDigits == 5) ? GPoint * 10 : GPoint)
+
 datetime g_lastTradeDate   = 0;
 datetime g_lastAnalysisMin = 0;
 

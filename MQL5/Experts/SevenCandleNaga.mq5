@@ -55,6 +55,11 @@ input bool   InpSkipUSHoliday  = true;   // Skip US Federal Holidays
 //+------------------------------------------------------------------+
 //| GLOBAL VARIABLES                                                 |
 //+------------------------------------------------------------------+
+// Auto-detect digit & pip
+int    GDigits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+double GPoint  = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+double GPip    = (GDigits == 3 || GDigits == 5) ? GPoint * 10 : GPoint;
+
 CTrade  g_trade;
 datetime g_lastTradeDate = 0;
 datetime g_lastAnalysisTime = 0;
