@@ -1,0 +1,193 @@
+//+------------------------------------------------------------------+
+//|              MTF_Integration_MQL4.ex4                             |
+//|     Breakout & Pullback EA with MTF Filter (MQL4 Example)         |
+//|                                v1.0                               |
+//+------------------------------------------------------------------+
+#property copyright "EFI SMART Trading System"
+#property version   "1.00"
+#property strict
+
+//--- Include MTF Filter Module
+#include <MTF_Filter.mqh>
+
+//+------------------------------------------------------------------+
+//| INPUT PARAMETERS                                                 |
+//+------------------------------------------------------------------+
+
+//=== Trading Parameters ===
+input double   LotSize          = 0.1;          // Lot Size
+input int      StopLoss         = 50;           // SL in points
+input int      TakeProfit       = 100;          // TP in points (2R)
+input int      BreakEvenLevel   = 20;           // Break Even trigger (points)
+
+//=== Breakout Parameters ===
+input int      LookbackPeriod   = 20;           // Breakout lookback period
+input double   ATRMultiplier    = 0.5;          // ATR multiplier for zone
+input int      ATRPeriod        = 14;           // ATR period
+
+//=== MTF Filter Parameters (already in MTF_Filter.mqh) ===
+// g_MTF_Enabled, g_MTF_Filter1, g_MTF_Filter2, g_MTF_SMAPeriod1, g_MTF_SMAPeriod2
+
+//+------------------------------------------------------------------+
+//| GLOBAL VARIABLES                                                 |
+//+------------------------------------------------------------------+
+CMtfFilter g_MTFFilter;           // MTF Filter Instance
+datetime   g_LastTradeTime;       // Prevent multiple trades per bar
+double     g_ATR;                  // Current ATR value
+
+//+------------------------------------------------------------------+
+//| EXPERT INITIALIZATION                                            |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   // Initialize MTF Filter
+   // Note: For MQL4, CMtfFilter constructor handles initialization
+   // No explicit Init() call needed
+   
+   g_LastTradeTime = 0;
+   Print("MTF Filter initialized. Trend periods: D1=", EnumToString(g_MTF_Filter1), 
+         " H4=", EnumToString(g_MTF_Filter2));
+   
+   return INIT_SUCCEEDED;
+}
+
+//+------------------------------------------------------------------+
+//| EXPERT DEINIT                                                    |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+   // Cleanup if needed
+   Print("EA Deinitialized. Reason: ", reason);
+}
+
+//+------------------------------------------------------------------+
+//| EXPERT TICKET                                                    |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   //--- Prevent multiple trades per bar
+   if(Time[0] <= g_LastTradeTime) return;
+   
+   //--- Update MTF Filter
+   g_MTFFilter.Refresh();
+   
+   //--- Get current ATR
+   g_ATR = iATR(NULL, PERIOD_CURRENT, ATRPeriod);
+   
+   //--- Check for breakout signal
+   CheckBreakoutSignal();
+}
+
+//+------------------------------------------------------------------+
+//| CHECK BREAKOUT SIGNAL WITH MTF FILTER                            |
+//+------------------------------------------------------------------+
+void CheckBreakoutSignal()
+{
+   //--- 1. Get highest high and lowest low over lookback period
+   double highestHigh = High[iHighest(NULL, 0, MODE_HIGH, LookbackPeriod, 1)];
+   double lowestLow   = Low[iLowest(NULL, 0, MODE_LOW, LookbackPeriod, 1)];
+   
+   //--- 2. Get current close price
+   double currentClose = Close[0];
+   double currentHigh  = High[0];
+   double currentLow   = Low[0];
+   
+   //--- 3. Check for breakout
+   bool bullishBreakout  = (currentHigh > highestHigh);
+   bool bearishBreakout  = (currentLow  < lowestLow);
+   
+   //--- 4. APPLY MTF FILTER HERE
+   if(bullishBreakout)
+   {
+      //=== BULLISH BREAKOUT ===
+      // Only allow if MTF filter permits LONG
+      if(!g_MTFFilter.AllowLong())
+      {
+         Print("[MTF] BULLISH breakout detected but BLOCKED by MTF filter");
+         Print("[MTF] Filter reason: ", g_MTFFilter.GetTrendInfo());
+         return;
+      }
+      
+      // Proceed with buy order
+      OpenBuyOrder();
+   }
+   else if(bearishBreakout)
+   {
+      //=== BEARISH BREAKOUT ===
+      // Only allow if MTF filter permits SHORT
+      if(!g_MTFFilter.AllowShort())
+      {
+         Print("[MTF] BEARISH breakout detected but BLOCKED by MTF filter");
+         Print("[MTF] Filter reason: ", g_MTFFilter.GetTrendInfo());
+         return;
+      }
+      
+      // Proceed with sell order
+      OpenSellOrder();
+   }
+}
+
+//+------------------------------------------------------------------+
+//| OPEN BUY ORDER                                                   |
+//+------------------------------------------------------------------+
+void OpenBuyOrder()
+{
+   double ask = Ask;
+   double sl  = NormalizeDouble(ask - StopLoss * Point, Digits);
+   double tp  = NormalizeDouble(ask + TakeProfit * Point, Digits);
+   
+   int ticket = OrderSend(Symbol(), OP_BUY, LotSize, ask, 3, sl, tp, 
+                          "MTF Breakout BUY", MagicNumber, 0, clrLime);
+   
+   if(ticket > 0)
+   {
+      Print("[BUY] Order opened successfully. Ticket: ", ticket);
+      Print("[MTF] Trend: ", g_MTFFilter.GetTrendInfo());
+      g_LastTradeTime = Time[0];
+   }
+   else
+   {
+      Print("[BUY] Order failed. Error: ", GetLastError());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| OPEN SELL ORDER                                                  |
+//+------------------------------------------------------------------+
+void OpenSellOrder()
+{
+   double bid = Bid;
+   double sl  = NormalizeDouble(bid + StopLoss * Point, Digits);
+   double tp  = NormalizeDouble(bid - TakeProfit * Point, Digits);
+   
+   int ticket = OrderSend(Symbol(), OP_SELL, LotSize, bid, 3, sl, tp, 
+                          "MTF Breakout SELL", MagicNumber, 0, clrRed);
+   
+   if(ticket > 0)
+   {
+      Print("[SELL] Order opened successfully. Ticket: ", ticket);
+      Print("[MTF] Trend: ", g_MTFFilter.GetTrendInfo());
+      g_LastTradeTime = Time[0];
+   }
+   else
+   {
+      Print("[SELL] Order failed. Error: ", GetLastError());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| EXPERT COMMENTARY (optional - display info on chart)              |
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+{
+   // Display MTF info on chart
+   Comment("\n",
+           "=== MTF FILTER STATUS ===\n",
+           g_MTFFilter.GetTrendInfo(), "\n",
+           "=====================\n",
+           "MTF Enabled: ", g_MTF_Enabled ? "YES" : "NO");
+}
+
+//+------------------------------------------------------------------+
+//| END OF EA                                                        |
+//+------------------------------------------------------------------+
