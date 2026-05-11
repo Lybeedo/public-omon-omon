@@ -1,41 +1,30 @@
 //+------------------------------------------------------------------+
-//|                           MTF_Filter_MS.mqh                       |
-//|              Multi Timeframe + Market Structure Filter Module      |
-//|                                v2.0                               |
+//|                              MTF_Filter.mqh                       |
+//|                           Multi Timeframe Filter Module           |
+//|                                v1.0                               |
 //+------------------------------------------------------------------+
 #property copyright "EFI SMART Trading System"
 #property strict
 
 //+------------------------------------------------------------------+
-//| INPUT PARAMETERS — TREND DETECTION                                |
+//| INPUT PARAMETERS                                                 |
 //+------------------------------------------------------------------+
-input bool   g_MTF_Enabled        = true;           // Enable MTF+MS Filter
-input int    g_MTF_TrendPeriod    = 50;             // Trend MA Period
-input ENUM_APPLIED_PRICE g_MTF_TrendPrice = PRICE_CLOSE;
 
-//--- Timeframe Filter
-input ENUM_TIMEFRAMES g_MTF_Filter1  = PERIOD_D1;  // Higher TF (Trend)
-input ENUM_TIMEFRAMES g_MTF_Filter2  = PERIOD_H4;  // Lower TF (Structure)
+// Trend Detection Settings
+input bool   g_MTF_Enabled        = true;        // Enable MTF Filter
+input int    g_MTF_TrendPeriod    = 50;          // Trend MA Period
+input ENUM_APPLIED_PRICE g_MTF_TrendPrice = PRICE_CLOSE; // Trend Price Type
 
-//--- SMA Crossover for trend
-input int    g_MTF_SMAPeriod1    = 20;              // SMA Fast Period
-input int    g_MTF_SMAPeriod2    = 50;              // SMA Slow Period
+// Timeframe Filter Settings
+input ENUM_TIMEFRAMES g_MTF_Filter1  = PERIOD_D1; // Filter Timeframe 1 (Higher)
+input ENUM_TIMEFRAMES g_MTF_Filter2  = PERIOD_H4; // Filter Timeframe 2 (Lower)
 
-//+------------------------------------------------------------------+
-//| INPUT PARAMETERS — MARKET STRUCTURE                               |
-//+------------------------------------------------------------------+
-input bool   g_MS_Enabled        = true;           // Enable Market Structure
-input int    g_MS_Lookback       = 100;             // Lookback for structure
-input int    g_MS_SwingStrength  = 5;               // Swing strength (pivots)
-input double g_MS_BOSThreshold   = 0.0005;          // BOS min breakout (price)
-
-//--- Order Block Settings
-input bool   g_OB_Enabled        = true;           // Enable Order Block zones
-input int    g_OB_Lookback       = 5;               // Bars to check for OB
-input int    g_OB_StrongOB       = 3;               // Strong OB = N+ consecutive same-dir candles
+// Trend Confirmation
+input int    g_MTF_SMAPeriod1    = 20;           // SMA Period 1 (Fast)
+input int    g_MTF_SMAPeriod2    = 50;           // SMA Period 2 (Slow)
 
 //+------------------------------------------------------------------+
-//| ENUMERATIONS                                                      |
+//| ENUMERATIONS                                                     |
 //+------------------------------------------------------------------+
 
 enum ENUM_TREND_DIRECTION
@@ -45,700 +34,277 @@ enum ENUM_TREND_DIRECTION
    TREND_NEUTRAL = 0     // No clear trend
 };
 
-enum ENUM_STRUCTURE_BREAK
-{
-   BOS_BULLISH  =  1,    // Break of Structure bullish
-   BOS_BEARISH  = -1,    // Break of Structure bearish
-   CHOC_BULLISH =  2,    // Change of Character bullish
-   CHOC_BEARISH = -2,    // Change of Character bearish
-   STRUCTURE_NONE = 0
-};
-
-enum ENUM_OB_TYPE
-{
-   OB_BULLISH   =  1,    // Bullish Order Block (last bearish candle)
-   OB_BEARISH   = -1,    // Bearish Order Block (last bullish candle)
-   OB_NONE      =  0
-};
-
 //+------------------------------------------------------------------+
-//| STRUCT: Swing Point                                               |
+//| CLASS: MTF Filter Engine                                          |
 //+------------------------------------------------------------------+
-struct SSwingPoint
-{
-   int      bar;            // Bar index
-   double   price;          // Swing high/low price
-   bool     isHigh;         // True = high, False = low
-};
-
-//+------------------------------------------------------------------+
-//| STRUCT: BOS Level                                                 |
-//+------------------------------------------------------------------+
-struct SBOSLevel
-{
-   double   price;          // Level that was broken
-   datetime time;           // Time of the level
-   bool     broken;         // Is it broken?
-   bool     bullish;        // Bullish or bearish BOS
-};
-
-//+------------------------------------------------------------------+
-//| STRUCT: Order Block                                              |
-//+------------------------------------------------------------------+
-struct SOrderBlock
-{
-   double   high;           // OB high
-   double   low;            // OB low
-   datetime time;           // OB creation time
-   int      strength;       // How strong (number of candles)
-   ENUM_OB_TYPE obType;     // Bullish or Bearish OB
-};
-
-//+------------------------------------------------------------------+
-//| CLASS: Market Structure + MTF Filter Engine                       |
-//+------------------------------------------------------------------+
-class CMSFilter
+class CMtfFilter
 {
 private:
-   //=== Trend (MTF) ===
-   ENUM_TREND_DIRECTION m_D1Trend;
-   ENUM_TREND_DIRECTION m_H4Trend;
-   double m_D1_MA_Fast, m_D1_MA_Slow;
-   double m_H4_MA_Fast, m_H4_MA_Slow;
+   //--- Trend Detection
+   ENUM_TREND_DIRECTION m_D1Trend;      // D1 trend direction
+   ENUM_TREND_DIRECTION m_H4Trend;      // H4 trend direction
    
-   //=== Market Structure ===
-   SSwingPoint m_Swings[];          // Detected swing points
-   int         m_SwingCount;
-   SBOSLevel   m_LastBOS;          // Last BOS detected
-   ENUM_STRUCTURE_BREAK m_LastStructure;
+   //--- MA Values
+   double m_D1_MA_Fast;                  // D1 Fast MA
+   double m_D1_MA_Slow;                  // D1 Slow MA
+   double m_H4_MA_Fast;                  // H4 Fast MA
+   double m_H4_MA_Slow;                  // H4 Slow MA
    
-   //=== Order Blocks ===
-   SOrderBlock m_BullishOB;        // Latest bullish OB
-   SOrderBlock m_BearishOB;        // Latest bearish OB
+   //--- Price Structure
+   double m_D1_Highs[3];                 // D1 last 3 highs
+   double m_D1_Lows[3];                  // D1 last 3 lows
+   double m_H4_Highs[3];                 // H4 last 3 highs
+   double m_H4_Lows[3];                  // H4 last 3 lows
    
-   //=== Helper Methods ===
+   //--- Helper Methods
    double GetMAValue(ENUM_TIMEFRAMES tf, int period, int shift);
-   int    DetectSwingPoints();
-   bool   CheckBOS();
-   bool   CheckCHoCH();
-   void   DetectOrderBlocks();
-   
-   //=== Structure Cache ===
-   datetime m_LastStructureCheck;
-   bool     m_StructureDirty;
+   bool   CheckHHHL(ENUM_TIMEFRAMES tf, double &highs[], double &lows[]);
+   ENUM_TREND_DIRECTION CombinedTrendDetection(ENUM_TIMEFRAMES tf);
    
 public:
    //--- Constructor/Destructor
-   CMSFilter();
-   ~CMSFilter();
+   CMtfFilter();
+   ~CMtfFilter();
    
    //--- Core Methods
    void Refresh();
-   void ForceRefresh() { m_StructureDirty = true; }
    
    //--- Trend Direction (MTF)
    ENUM_TREND_DIRECTION GetD1Trend()   { return m_D1Trend; }
    ENUM_TREND_DIRECTION GetH4Trend()   { return m_H4Trend; }
+   
+   //--- Combined Trend (D1 + H4)
    ENUM_TREND_DIRECTION GetCombinedTrend();
    
-   //--- Market Structure
-   ENUM_STRUCTURE_BREAK GetLastStructure() { return m_LastStructure; }
-   bool   IsBullishStructure();   // HH/HL forming, or BOS bullish
-   bool   IsBearishStructure();   // LH/LL forming, or BOS bearish
+   //--- Check if signal aligns with trend
+   bool   IsBullishAligned();   // Returns true if all MAs bullish
+   bool   IsBearishAligned();   // Returns true if all MAs bearish
    
-   //--- Order Blocks
-   bool   IsPriceInBullishOB(double price);
-   bool   IsPriceInBearishOB(double price);
-   double GetBullishOBHigh()      { return m_BullishOB.high; }
-   double GetBullishOBLow()       { return m_BullishOB.low; }
-   double GetBearishOBHigh()       { return m_BearishOB.high; }
-   double GetBearishOBLow()       { return m_BearishOB.low; }
+   //--- Filter Results
+   bool   AllowLong();
+   bool   AllowShort();
    
-   //=== TRADING DECISION METHODS ===
-   bool   AllowLong();    // Main entry filter for BUY
-   bool   AllowShort();  // Main entry filter for SELL
-   
-   //--- Structure-only filters
-   bool   AllowLong_MS(); // Only Market Structure filter for BUY
-   bool   AllowShort_MS();// Only Market Structure filter for SELL
-   
-   //--- Trend-only filters
-   bool   AllowLong_MTF(); // Only MTF trend filter for BUY
-   bool   AllowShort_MTF();// Only MTF trend filter for SELL
-   
-   //--- Info & Debug
+   //--- Info String (for display)
    string GetTrendInfo();
-   string GetStructureInfo();
-   string GetFullInfo();   // Complete status string
 };
 
 //+------------------------------------------------------------------+
 //| Constructor                                                       |
 //+------------------------------------------------------------------+
-CMSFilter::CMSFilter()
+CMtfFilter::CMtfFilter()
 {
    m_D1Trend = TREND_NEUTRAL;
    m_H4Trend = TREND_NEUTRAL;
-   m_SwingCount = 0;
-   m_LastStructure = STRUCTURE_NONE;
-   m_StructureDirty = true;
-   m_LastStructureCheck = 0;
+   m_D1_MA_Fast = 0;
+   m_D1_MA_Slow = 0;
+   m_H4_MA_Fast = 0;
+   m_H4_MA_Slow = 0;
    
-   ArrayResize(m_Swings, 0);
-   
-   // Init order blocks
-   m_BullishOB.obType = OB_NONE;
-   m_BearishOB.obType = OB_NONE;
+   ArrayInitialize(m_D1_Highs, 0);
+   ArrayInitialize(m_D1_Lows, 0);
+   ArrayInitialize(m_H4_Highs, 0);
+   ArrayInitialize(m_H4_Lows, 0);
 }
 
 //+------------------------------------------------------------------+
 //| Destructor                                                        |
 //+------------------------------------------------------------------+
-CMSFilter::~CMSFilter()
+CMtfFilter::~CMtfFilter()
 {
 }
 
 //+------------------------------------------------------------------+
-//| Refresh - Update all data                                         |
+//| Get MA Value for specific timeframe                              |
 //+------------------------------------------------------------------+
-void CMSFilter::Refresh()
-{
-   datetime currentTime = Time[0];
-   
-   //--- 1. Update MTF Trend (always)
-   UpdateMTFTrend();
-   
-   //--- 2. Update Market Structure (only on new bar or if dirty)
-   if(m_StructureDirty || currentTime != m_LastStructureCheck)
-   {
-      DetectSwingPoints();
-      CheckBOS();
-      CheckCHoCH();
-      DetectOrderBlocks();
-      m_StructureDirty = false;
-      m_LastStructureCheck = currentTime;
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Update MTF Trend                                                  |
-//+------------------------------------------------------------------+
-void CMSFilter::UpdateMTFTrend()
-{
-   //=== D1 Trend ===
-   double d1Fast = iMA(NULL, g_MTF_Filter1, g_MTF_SMAPeriod1, 0, MODE_EMA, g_MTF_TrendPrice, 0);
-   double d1Slow = iMA(NULL, g_MTF_Filter1, g_MTF_SMAPeriod2, 0, MODE_EMA, g_MTF_TrendPrice, 0);
-   
-   if(d1Fast > d1Slow) m_D1Trend = TREND_BULLISH;
-   else if(d1Fast < d1Slow) m_D1Trend = TREND_BEARISH;
-   else m_D1Trend = TREND_NEUTRAL;
-   
-   m_D1_MA_Fast = d1Fast;
-   m_D1_MA_Slow = d1Slow;
-   
-   //=== H4 Trend ===
-   double h4Fast = iMA(NULL, g_MTF_Filter2, g_MTF_SMAPeriod1, 0, MODE_EMA, g_MTF_TrendPrice, 0);
-   double h4Slow = iMA(NULL, g_MTF_Filter2, g_MTF_SMAPeriod2, 0, MODE_EMA, g_MTF_TrendPrice, 0);
-   
-   if(h4Fast > h4Slow) m_H4Trend = TREND_BULLISH;
-   else if(h4Fast < h4Slow) m_H4Trend = TREND_BEARISH;
-   else m_H4Trend = TREND_NEUTRAL;
-   
-   m_H4_MA_Fast = h4Fast;
-   m_H4_MA_Slow = h4Slow;
-}
-
-//+------------------------------------------------------------------+
-//| Get MA Value                                                      |
-//+------------------------------------------------------------------+
-double CMSFilter::GetMAValue(ENUM_TIMEFRAMES tf, int period, int shift)
+double CMtfFilter::GetMAValue(ENUM_TIMEFRAMES tf, int period, int shift)
 {
    return iMA(NULL, tf, period, 0, MODE_EMA, g_MTF_TrendPrice, shift);
 }
 
 //+------------------------------------------------------------------+
-//| Detect Swing Points using Simple ZigZag-like method               |
+//| Check Higher High / Higher Low pattern                           |
 //+------------------------------------------------------------------+
-int CMSFilter::DetectSwingPoints()
+bool CMtfFilter::CheckHHHL(ENUM_TIMEFRAMES tf, double &highs[], double &lows[])
 {
-   // Reset swings
-   m_SwingCount = 0;
-   ArrayResize(m_Swings, 0);
-   
-   int lookback = MathMin(g_MS_Lookback, 100);
-   
-   // Find local highs and lows
-   for(int i = g_MS_SwingStrength + 1; i < lookback - g_MS_SwingStrength; i++)
+   // Get last 3 swing highs and lows
+   for(int i = 0; i < 3; i++)
    {
-      // Check if this is a swing high
-      bool isHigh = true;
-      for(int j = 1; j <= g_MS_SwingStrength; j++)
-      {
-         if(High[i + j] >= High[i] || High[i - j] >= High[i])
-         {
-            isHigh = false;
-            break;
-         }
-      }
-      
-      // Check if this is a swing low
-      bool isLow = true;
-      for(int j = 1; j <= g_MS_SwingStrength; j++)
-      {
-         if(Low[i + j] <= Low[i] || Low[i - j] <= Low[i])
-         {
-            isLow = false;
-            break;
-         }
-      }
-      
-      if(isHigh)
-      {
-         ArrayResize(m_Swings, m_SwingCount + 1);
-         m_Swings[m_SwingCount].bar = i;
-         m_Swings[m_SwingCount].price = High[i];
-         m_Swings[m_SwingCount].isHigh = true;
-         m_SwingCount++;
-      }
-      else if(isLow)
-      {
-         ArrayResize(m_Swings, m_SwingCount + 1);
-         m_Swings[m_SwingCount].bar = i;
-         m_Swings[m_SwingCount].price = Low[i];
-         m_Swings[m_SwingCount].isHigh = false;
-         m_SwingCount++;
-      }
+      highs[i] = iHigh(NULL, tf, i);
+      lows[i]  = iLow(NULL, tf, i);
    }
    
-   return m_SwingCount;
+   // Bullish: Higher Highs AND Higher Lows
+   bool bullishPattern = (highs[1] > highs[2] && highs[0] > highs[1]) &&
+                         (lows[1] > lows[2] && lows[0] > lows[1]);
+   
+   // Bearish: Lower Highs AND Lower Lows
+   bool bearishPattern = (highs[1] < highs[2] && highs[0] < highs[1]) &&
+                        (lows[1] < lows[2] && lows[0] < lows[1]);
+   
+   return bullishPattern || bearishPattern;
 }
 
 //+------------------------------------------------------------------+
-//| Check Break of Structure (BOS)                                    |
-//-------------------------------------------------------------------+
-bool CMSFilter::CheckBOS()
+//| Combined Trend Detection (HHHL + MA Crossover)                   |
+//+------------------------------------------------------------------+
+ENUM_TREND_DIRECTION CMtfFilter::CombinedTrendDetection(ENUM_TIMEFRAMES tf)
 {
-   if(m_SwingCount < 4) return false;
+   //--- 1. Price Structure Analysis (HHHL)
+   double highs[], lows[];
+   ArrayResize(highs, 3);
+   ArrayResize(lows, 3);
+   bool hasHHHL = CheckHHHL(tf, highs, lows);
    
-   // Need at least: previous high, previous low, current high, current low
-   // Find most recent swings
-   int lastHigh = -1, lastLow = -1, prevHigh = -1, prevLow = -1;
+   //--- 2. MA Crossover Analysis
+   double maFast = GetMAValue(tf, g_MTF_SMAPeriod1, 0);
+   double maSlow = GetMAValue(tf, g_MTF_SMAPeriod2, 0);
+   double maFastPrev = GetMAValue(tf, g_MTF_SMAPeriod1, 1);
+   double maSlowPrev = GetMAValue(tf, g_MTF_SMAPeriod2, 1);
    
-   for(int i = 0; i < m_SwingCount; i++)
+   bool maBullish = (maFast > maSlow) && (maFastPrev <= maSlowPrev);
+   bool maBearish = (maFast < maSlow) && (maFastPrev >= maSlowPrev);
+   bool maAlignedBullish = maFast > maSlow;
+   bool maAlignedBearish = maFast < maSlow;
+   
+   //--- 3. Combine Both Methods
+   ENUM_TREND_DIRECTION trend = TREND_NEUTRAL;
+   
+   // Need at least MA alignment + 1 confirmation (HHHL or strong MA signal)
+   if(maAlignedBullish && !maAlignedBearish)
    {
-      if(m_Swings[i].isHigh)
-      {
-         if(lastHigh < 0) lastHigh = i;
-         else if(prevHigh < 0) prevHigh = i;
-      }
-      else
-      {
-         if(lastLow < 0) lastLow = i;
-         else if(prevLow < 0) prevLow = i;
-      }
+      trend = TREND_BULLISH;
+   }
+   else if(maAlignedBearish && !maAlignedBullish)
+   {
+      trend = TREND_BEARISH;
    }
    
-   if(lastHigh < 0 || lastLow < 0 || prevHigh < 0 || prevLow < 0)
-      return false;
-   
-   //=== Bullish BOS: Price breaks above previous higher high
-   // Last high > Previous high (HH) and price breaks above it
-   bool bullishBOS = (m_Swings[lastHigh].price > m_Swings[prevHigh].price) &&
-                     (Close[0] > m_Swings[lastHigh].price + g_MS_BOSThreshold);
-   
-   //=== Bearish BOS: Price breaks below previous lower low
-   // Last low < Previous low (LL) and price breaks below it
-   bool bearishBOS = (m_Swings[lastLow].price < m_Swings[prevLow].price) &&
-                     (Close[0] < m_Swings[lastLow].price - g_MS_BOSThreshold);
-   
-   if(bullishBOS)
-   {
-      m_LastStructure = BOS_BULLISH;
-      m_LastBOS.price = m_Swings[lastHigh].price;
-      m_LastBOS.bullish = true;
-      m_LastBOS.broken = true;
-      m_LastBOS.time = Time[m_Swings[lastHigh].bar];
-      return true;
-   }
-   else if(bearishBOS)
-   {
-      m_LastStructure = BOS_BEARISH;
-      m_LastBOS.price = m_Swings[lastLow].price;
-      m_LastBOS.bullish = false;
-      m_LastBOS.broken = true;
-      m_LastBOS.time = Time[m_Swings[lastLow].bar];
-      return true;
-   }
-   
-   return false;
+   return trend;
 }
 
 //+------------------------------------------------------------------+
-//| Check Change of Character (CHoCH)                                  |
+//| Refresh - Update all MTF data                                    |
 //+------------------------------------------------------------------+
-bool CMSFilter::CheckCHoCH()
+void CMtfFilter::Refresh()
 {
-   if(m_SwingCount < 6) return false;
+   if(!g_MTF_Enabled) return;
    
-   // Collect last 4 swing points (2 highs, 2 lows minimum)
-   double highs[2], lows[2];
-   int hIdx = 0, lIdx = 0;
+   //--- Get D1 Trend
+   m_D1Trend = CombinedTrendDetection(g_MTF_Filter1);
    
-   for(int i = m_SwingCount - 1; i >= 0 && (hIdx < 2 || lIdx < 2); i--)
-   {
-      if(m_Swings[i].isHigh && hIdx < 2) highs[hIdx++] = m_Swings[i].price;
-      else if(!m_Swings[i].isHigh && lIdx < 2) lows[lIdx++] = m_Swings[i].price;
-   }
+   //--- Get H4 Trend  
+   m_H4Trend = CombinedTrendDetection(g_MTF_Filter2);
    
-   if(hIdx < 2 || lIdx < 2) return false;
-   
-   //=== Bullish CHoCH: Price breaks above previous low (structure shift)
-   // In uptrend we have HH/HL, CHoCH when LL forms after price breaks above a structure low
-   bool bullishCHoCH = (highs[0] < highs[1]) &&  // Lower high (LH) formed
-                      (Close[0] > highs[0]);     // But price still broke above
-   
-   //=== Bearish CHoCH: Price breaks below previous high
-   bool bearishCHoCH = (lows[0] > lows[1]) &&    // Higher low (HL) formed
-                      (Close[0] < lows[0]);      // But price broke below
-   
-   if(bullishCHoCH)
-   {
-      m_LastStructure = CHOC_BULLISH;
-      return true;
-   }
-   else if(bearishCHoCH)
-   {
-      m_LastStructure = CHOC_BEARISH;
-      return true;
-   }
-   
-   return false;
+   //--- Store MA values for display
+   m_D1_MA_Fast = GetMAValue(g_MTF_Filter1, g_MTF_SMAPeriod1, 0);
+   m_D1_MA_Slow = GetMAValue(g_MTF_Filter1, g_MTF_SMAPeriod2, 0);
+   m_H4_MA_Fast = GetMAValue(g_MTF_Filter2, g_MTF_SMAPeriod1, 0);
+   m_H4_MA_Slow = GetMAValue(g_MTF_Filter2, g_MTF_SMAPeriod2, 0);
 }
 
 //+------------------------------------------------------------------+
-//| Detect Order Blocks                                               |
+//| Get Combined Trend (D1 + H4)                                     |
 //+------------------------------------------------------------------+
-void CMSFilter::DetectOrderBlocks()
-{
-   // Look back g_OB_Lookback bars for the last bearish/bullish candle body
-   // that could be an order block
-   
-   double bullishOBHigh = 0, bullishOBLow = 0;
-   double bearishOBHigh = 0, bearishOBLow = 0;
-   int bullCount = 0, bearCount = 0;
-   
-   for(int i = 1; i <= g_OB_Lookback; i++)
-   {
-      double body = MathAbs(Close[i] - Open[i]);
-      double range = High[i] - Low[i];
-      
-      // Bullish OB: Last bearish candle before current bullish move
-      if(Close[i] < Open[i]) // Bearish candle
-      {
-         if(bullishOBLow == 0 || Low[i] < bullishOBLow)
-         {
-            bullishOBLow = Low[i];
-            bullishOBHigh = High[i];
-         }
-         bullCount++;
-      }
-      
-      // Bearish OB: Last bullish candle before current bearish move
-      if(Close[i] > Open[i]) // Bullish candle
-      {
-         if(bearishOBHigh == 0 || High[i] > bearishOBHigh)
-         {
-            bearishOBHigh = High[i];
-            bearishOBLow = Low[i];
-         }
-         bearCount++;
-      }
-   }
-   
-   // Set bullish OB if found
-   if(bullCount > 0)
-   {
-      m_BullishOB.high = bullishOBHigh;
-      m_BullishOB.low = bullishOBLow;
-      m_BullishOB.time = Time[1];
-      m_BullishOB.strength = bullCount;
-      m_BullishOB.obType = OB_BULLISH;
-   }
-   
-   // Set bearish OB if found
-   if(bearCount > 0)
-   {
-      m_BearishOB.high = bearishOBHigh;
-      m_BearishOB.low = bearishOBLow;
-      m_BearishOB.time = Time[1];
-      m_BearishOB.strength = bearCount;
-      m_BearishOB.obType = OB_BEARISH;
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Get Combined Trend (D1 + H4)                                      |
-//+------------------------------------------------------------------+
-ENUM_TREND_DIRECTION CMSFilter::GetCombinedTrend()
+ENUM_TREND_DIRECTION CMtfFilter::GetCombinedTrend()
 {
    if(!g_MTF_Enabled) return TREND_NEUTRAL;
    
+   // Both must agree for strong signal
    if(m_D1Trend == m_H4Trend && m_D1Trend != TREND_NEUTRAL)
-      return m_D1Trend;
+   {
+      return m_D1Trend;  // Strong confirmation
+   }
    
+   // D1 dominates if H4 is neutral
    if(m_D1Trend != TREND_NEUTRAL && m_H4Trend == TREND_NEUTRAL)
+   {
       return m_D1Trend;
+   }
+   
+   // H4 can confirm D1 trend
+   if(m_D1Trend == m_H4Trend)
+   {
+      return m_D1Trend;
+   }
    
    return TREND_NEUTRAL;
 }
 
 //+------------------------------------------------------------------+
-//| Check Bullish Structure (HH/HL or BOS Bullish)                    |
+//| Check if all MAs are bullish aligned                            |
 //+------------------------------------------------------------------+
-bool CMSFilter::IsBullishStructure()
-{
-   if(!g_MS_Enabled) return true;
-   
-   // Check for bullish structure signals
-   if(m_LastStructure == BOS_BULLISH) return true;
-   if(m_LastStructure == CHOC_BULLISH) return true;
-   
-   // Check swing points for HH/HL pattern
-   if(m_SwingCount >= 4)
-   {
-      // Last 2 highs and 2 lows
-      double recentHighs[2], recentLows[2];
-      int hCount = 0, lCount = 0;
-      
-      for(int i = m_SwingCount - 1; i >= 0 && (hCount < 2 || lCount < 2); i--)
-      {
-         if(m_Swings[i].isHigh && hCount < 2) recentHighs[hCount++] = m_Swings[i].price;
-         else if(!m_Swings[i].isHigh && lCount < 2) recentLows[lCount++] = m_Swings[i].price;
-      }
-      
-      // Bullish structure: HH and HL
-      if(hCount >= 2 && lCount >= 2)
-      {
-         return (recentHighs[0] > recentHighs[1] && recentLows[0] > recentLows[1]);
-      }
-   }
-   
-   return false;
-}
-
-//+------------------------------------------------------------------+
-//| Check Bearish Structure (LH/LL or BOS Bearish)                    |
-//+------------------------------------------------------------------+
-bool CMSFilter::IsBearishStructure()
-{
-   if(!g_MS_Enabled) return true;
-   
-   if(m_LastStructure == BOS_BEARISH) return true;
-   if(m_LastStructure == CHOC_BEARISH) return true;
-   
-   if(m_SwingCount >= 4)
-   {
-      double recentHighs[2], recentLows[2];
-      int hCount = 0, lCount = 0;
-      
-      for(int i = m_SwingCount - 1; i >= 0 && (hCount < 2 || lCount < 2); i--)
-      {
-         if(m_Swings[i].isHigh && hCount < 2) recentHighs[hCount++] = m_Swings[i].price;
-         else if(!m_Swings[i].isHigh && lCount < 2) recentLows[lCount++] = m_Swings[i].price;
-      }
-      
-      // Bearish structure: LH and LL
-      if(hCount >= 2 && lCount >= 2)
-      {
-         return (recentHighs[0] < recentHighs[1] && recentLows[0] < recentLows[1]);
-      }
-   }
-   
-   return false;
-}
-
-//+------------------------------------------------------------------+
-//| Check if price is in Bullish Order Block                          |
-//+------------------------------------------------------------------+
-bool CMSFilter::IsPriceInBullishOB(double price)
-{
-   if(!g_MS_Enabled || !g_OB_Enabled) return false;
-   if(m_BullishOB.obType != OB_BULLISH) return false;
-   
-   return (price >= m_BullishOB.low && price <= m_BullishOB.high);
-}
-
-//+------------------------------------------------------------------+
-//| Check if price is in Bearish Order Block                          |
-//+------------------------------------------------------------------+
-bool CMSFilter::IsPriceInBearishOB(double price)
-{
-   if(!g_MS_Enabled || !g_OB_Enabled) return false;
-   if(m_BearishOB.obType != OB_BEARISH) return false;
-   
-   return (price >= m_BearishOB.low && price <= m_BearishOB.high);
-}
-
-//+------------------------------------------------------------------+
-//| MAIN ENTRY FILTER: Allow Long                                     |
-//| Combined MTF + Market Structure + Order Block                     |
-//+------------------------------------------------------------------+
-bool CMSFilter::AllowLong()
-{
-   //=== Step 1: MTF Trend Check ===
-   if(g_MTF_Enabled)
-   {
-      ENUM_TREND_DIRECTION trend = GetCombinedTrend();
-      if(trend == TREND_BEARISH)
-      {
-         Print("[MTF+MS] LONG blocked — MTF trend is BEARISH");
-         return false;
-      }
-   }
-   
-   //=== Step 2: Market Structure Check ===
-   if(g_MS_Enabled)
-   {
-      // Need bullish structure for LONG
-      if(!IsBullishStructure())
-      {
-         Print("[MTF+MS] LONG blocked — Market Structure is not bullish");
-         return false;
-      }
-   }
-   
-   //=== Step 3: Order Block Confirmation (optional) ===
-   // If price is at bullish OB, it's a stronger signal
-   // But if NOT at OB, we still allow (OB is bonus filter)
-   
-   return true;
-}
-
-//+------------------------------------------------------------------+
-//| MAIN ENTRY FILTER: Allow Short                                    |
-//+------------------------------------------------------------------+
-bool CMSFilter::AllowShort()
-{
-   //=== Step 1: MTF Trend Check ===
-   if(g_MTF_Enabled)
-   {
-      ENUM_TREND_DIRECTION trend = GetCombinedTrend();
-      if(trend == TREND_BULLISH)
-      {
-         Print("[MTF+MS] SHORT blocked — MTF trend is BULLISH");
-         return false;
-      }
-   }
-   
-   //=== Step 2: Market Structure Check ===
-   if(g_MS_Enabled)
-   {
-      if(!IsBearishStructure())
-      {
-         Print("[MTF+MS] SHORT blocked — Market Structure is not bearish");
-         return false;
-      }
-   }
-   
-   return true;
-}
-
-//+------------------------------------------------------------------+
-//| Market Structure Only: Allow Long                                |
-//+------------------------------------------------------------------+
-bool CMSFilter::AllowLong_MS()
-{
-   if(!g_MS_Enabled) return true;
-   return IsBullishStructure();
-}
-
-//+------------------------------------------------------------------+
-//| Market Structure Only: Allow Short                                |
-//+------------------------------------------------------------------+
-bool CMSFilter::AllowShort_MS()
-{
-   if(!g_MS_Enabled) return true;
-   return IsBearishStructure();
-}
-
-//+------------------------------------------------------------------+
-//| MTF Trend Only: Allow Long                                       |
-//+------------------------------------------------------------------+
-bool CMSFilter::AllowLong_MTF()
+bool CMtfFilter::IsBullishAligned()
 {
    if(!g_MTF_Enabled) return true;
-   ENUM_TREND_DIRECTION trend = GetCombinedTrend();
-   return (trend != TREND_BEARISH);
+   
+   bool d1Bullish = (m_D1_MA_Fast > m_D1_MA_Slow);
+   bool h4Bullish = (m_H4_MA_Fast > m_H4_MA_Slow);
+   
+   return d1Bullish && h4Bullish;
 }
 
 //+------------------------------------------------------------------+
-//| MTF Trend Only: Allow Short                                       |
+//| Check if all MAs are bearish aligned                             |
 //+------------------------------------------------------------------+
-bool CMSFilter::AllowShort_MTF()
+bool CMtfFilter::IsBearishAligned()
 {
    if(!g_MTF_Enabled) return true;
-   ENUM_TREND_DIRECTION trend = GetCombinedTrend();
-   return (trend != TREND_BULLISH);
+   
+   bool d1Bearish = (m_D1_MA_Fast < m_D1_MA_Slow);
+   bool h4Bearish = (m_H4_MA_Fast < m_H4_MA_Slow);
+   
+   return d1Bearish && h4Bearish;
 }
 
 //+------------------------------------------------------------------+
-//| Get Trend Info String                                             |
+//| Allow Long Position                                               |
 //+------------------------------------------------------------------+
-string CMSFilter::GetTrendInfo()
+bool CMtfFilter::AllowLong()
 {
-   string d1Str, h4Str, combStr;
+   if(!g_MTF_Enabled) return true;
    
-   if(m_D1Trend == TREND_BULLISH) d1Str = "BULL";
-   else if(m_D1Trend == TREND_BEARISH) d1Str = "BEAR";
-   else d1Str = "NEUT";
+   // Allow LONG if trend is BULLISH or NEUTRAL
+   ENUM_TREND_DIRECTION trend = GetCombinedTrend();
    
-   if(m_H4Trend == TREND_BULLISH) h4Str = "BULL";
-   else if(m_H4Trend == TREND_BEARISH) h4Str = "BEAR";
-   else h4Str = "NEUT";
+   return (trend == TREND_BULLISH || trend == TREND_NEUTRAL);
+}
+
+//+------------------------------------------------------------------+
+//| Allow Short Position                                             |
+//+------------------------------------------------------------------+
+bool CMtfFilter::AllowShort()
+{
+   if(!g_MTF_Enabled) return true;
+   
+   // Allow SHORT if trend is BEARISH or NEUTRAL
+   ENUM_TREND_DIRECTION trend = GetCombinedTrend();
+   
+   return (trend == TREND_BEARISH || trend == TREND_NEUTRAL);
+}
+
+//+------------------------------------------------------------------+
+//| Get Trend Info String for Display                                 |
+//+------------------------------------------------------------------+
+string CMtfFilter::GetTrendInfo()
+{
+   string trendD1, trendH4, combined;
+   
+   if(m_D1Trend == TREND_BULLISH) trendD1 = "BULL";
+   else if(m_D1Trend == TREND_BEARISH) trendD1 = "BEAR";
+   else trendD1 = "NEUT";
+   
+   if(m_H4Trend == TREND_BULLISH) trendH4 = "BULL";
+   else if(m_H4Trend == TREND_BEARISH) trendH4 = "BEAR";
+   else trendH4 = "NEUT";
    
    ENUM_TREND_DIRECTION comb = GetCombinedTrend();
-   if(comb == TREND_BULLISH) combStr = "BULL";
-   else if(comb == TREND_BEARISH) combStr = "BEAR";
-   else combStr = "NEUT";
+   if(comb == TREND_BULLISH) combined = "BULL";
+   else if(comb == TREND_BEARISH) combined = "BEAR";
+   else combined = "NEUT";
    
-   return StringFormat("D1:%s H4:%s CFX:%s", d1Str, h4Str, combStr);
+   return StringFormat("D1:%s | H4:%s | CFX:%s", trendD1, trendH4, combined);
 }
 
 //+------------------------------------------------------------------+
-//| Get Structure Info String                                         |
-//+------------------------------------------------------------------+
-string CMSFilter::GetStructureInfo()
-{
-   string structStr, bosStr = "";
-   
-   // Structure type
-   if(m_LastStructure == BOS_BULLISH) structStr = "BOS_BULL";
-   else if(m_LastStructure == BOS_BEARISH) structStr = "BOS_BEAR";
-   else if(m_LastStructure == CHOC_BULLISH) structStr = "CHoCH_BULL";
-   else if(m_LastStructure == CHOC_BEARISH) structStr = "CHoCH_BEAR";
-   else structStr = "NONE";
-   
-   // Order blocks
-   if(g_MS_Enabled && g_OB_Enabled)
-   {
-      if(m_BullishOB.obType == OB_BULLISH)
-         bosStr = StringFormat(" | BullOB:%.5f-%.5f", m_BullishOB.low, m_BullishOB.high);
-      if(m_BearishOB.obType == OB_BEARISH)
-         bosStr += StringFormat(" | BearOB:%.5f-%.5f", m_BearishOB.low, m_BearishOB.high);
-   }
-   
-   return StringFormat("[MS:%s]%s", structStr, bosStr);
-}
-
-//+------------------------------------------------------------------+
-//| Get Full Status Info                                              |
-//+------------------------------------------------------------------+
-string CMSFilter::GetFullInfo()
-{
-   return StringFormat("MTF+MS FILTER\n===============\nTrend: %s\nStructure: %s",
-                       GetTrendInfo(), GetStructureInfo());
-}
-
-//+------------------------------------------------------------------+
-//| END OF MODULE                                                     |
+//| END OF MTF FILTER MODULE                                         |
 //+------------------------------------------------------------------+
