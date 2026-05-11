@@ -14,9 +14,10 @@
 //| INPUT PARAMETERS                                                 |
 //+------------------------------------------------------------------+
 input group "=== CAPITAL & TARGET ==="
-input double InpStartCapital  = 500.0;     // Initial capital (USC)
-input double InpTargetCapital = 5000.0;   // Target capital (USC)
+input double InpStartCapital  = 500.0;     // Initial capital
+input double InpTargetCapital = 5000.0;    // Target capital
 input double InpMinCapital    = 0.0;       // Stop if capital reaches this
+input string InpCurrency      = "";        // Currency symbol (auto-detect if empty)
 
 input group "=== RISK & REWARD ==="
 input double InpRiskUSC       = 50.0;      // Risk per trade (USC) = SL
@@ -56,6 +57,7 @@ double GPoint  = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
 double GPip    = (GDigits == 3 || GDigits == 5) ? GPoint * 10 : GPoint;
 
 // Capital tracking
+string g_currency    = "";
 double g_currentCapital = 0;
 double g_startCapital   = 0;
 int    g_totalTrades    = 0;
@@ -90,26 +92,34 @@ int OnInit() {
     g_trade.SetTypeFilling(ORDER_FILLING_FOK);
     g_trade.SetAsyncMode(false);
 
+    // Auto-detect currency from account
+    if(StringLen(InpCurrency) == 0) {
+        string accCurrency = AccountInfoString(ACCOUNT_CURRENCY);
+        if(StringLen(accCurrency) > 0) {
+            g_currency = accCurrency;
+        } else {
+            g_currency = "USC"; // fallback
+        }
+    } else {
+        g_currency = InpCurrency;
+    }
+
     g_startCapital   = InpStartCapital;
     g_currentCapital = InpStartCapital;
     g_sessionStart   = TimeCurrent();
     g_lastDailyReset = GetDayStart(TimeCurrent());
 
-    // Calculate lot from USC risk if risk percent is set
-    double riskLot = 0;
-    if(InpRiskPercent > 0) {
-        riskLot = CalculateLotFromRiskPercent(InpRiskPercent);
-    }
-
     Print("=== COIN FLIP EA INITIALIZED ===");
-    Print("Start Capital: ", DoubleToStr(InpStartCapital, 2), " USC");
-    Print("Target:       ", DoubleToStr(InpTargetCapital, 2), " USC (", DoubleToStr(InpTargetCapital/InpStartCapital, 1), "x)");
-    Print("Risk:         ", DoubleToStr(InpRiskUSC, 2), " USC per trade");
-    Print("Reward:       ", DoubleToStr(InpRewardUSC, 2), " USC per trade");
+    Print("Start Capital: ", DoubleToStr(InpStartCapital, 2), " ", g_currency);
+    Print("Target:       ", DoubleToStr(InpTargetCapital, 2), " ", g_currency,
+          " (", DoubleToStr(InpTargetCapital/InpStartCapital, 1), "x)");
+    Print("Risk:         ", DoubleToStr(InpRiskUSC, 2), " ", g_currency, " per trade");
+    Print("Reward:       ", DoubleToStr(InpRewardUSC, 2), " ", g_currency, " per trade");
     Print("RR Ratio:     1:", DoubleToStr(InpRiskReward, 1));
     Print("Heads (", InpHeadsSide, ") = BUY | Tails (", InpTailsSide, ") = SELL");
-    Print("Expected Value per trade: ", DoubleToStr(CalculateExpectedValue(), 2), " USC");
+    Print("Expected Value per trade: ", DoubleToStr(CalculateExpectedValue(), 2), " ", g_currency);
     Print("Win Probability (theoretical): 50%");
+    Print("Account Currency: ", g_currency);
     Print("Digits: ", GDigits, " | Point: ", DoubleToStr(GPoint, 5), " | Pip: ", DoubleToStr(GPipe, 5));
     Print("================================");
 
@@ -317,11 +327,11 @@ void CheckPosition() {
         if(hitTP) {
             g_wins++;
             g_currentCapital += InpRewardUSC;
-            Print("✅ WIN! +", DoubleToStr(InpRewardUSC, 2), " USC");
+            Print("✅ WIN! +", DoubleToStr(InpRewardUSC, 2), " ", g_currency);
         } else {
             g_losses++;
             g_currentCapital -= InpRiskUSC;
-            Print("❌ LOSS! -", DoubleToStr(InpRiskUSC, 2), " USC");
+            Print("❌ LOSS! -", DoubleToStr(InpRiskUSC, 2), " ", g_currency);
         }
 
         g_totalTrades++;
@@ -472,39 +482,73 @@ void PrintFinalStats() {
     Print("Total Trades:    ", g_totalTrades);
     Print("Wins:            ", g_wins, " (", DoubleToStr(GetWinrate(), 1), "%)");
     Print("Losses:          ", g_losses);
-    Print("Total PnL:       ", DoubleToStr(g_totalPnL, 2), " USC");
-    Print("Final Capital:   ", DoubleToStr(g_currentCapital, 2), " USC");
-    Print("Start Capital:   ", DoubleToStr(g_startCapital, 2), " USC");
+    Print("Total PnL:       ", DoubleToStr(g_totalPnL, 2), " ", g_currency);
+    Print("Final Capital:   ", DoubleToStr(g_currentCapital, 2), " ", g_currency);
+    Print("Start Capital:   ", DoubleToStr(g_startCapital, 2), " ", g_currency);
     Print("Multiplier:      ", DoubleToStr(g_currentCapital / g_startCapital, 2), "x");
-    Print("Expected EV:    ", DoubleToStr(CalculateExpectedValue(), 2), " USC/trade");
+    Print("Expected EV:    ", DoubleToStr(CalculateExpectedValue(), 2), " ", g_currency, "/trade");
     Print("================================");
 }
 
 //+------------------------------------------------------------------+
-//| EXPERT COMMENT (display stats on chart)                          |
+//| EXPERT COMMENT (dashboard on chart)                               |
 //+------------------------------------------------------------------+
+string GetStateText() {
+    switch(g_state) {
+        case STATE_WAITING:       return "[WAITING]";
+        case STATE_READY:         return "[READY]";
+        case STATE_IN_TRADE:      return "[IN TRADE]";
+        case STATE_TARGET_REACHED: return "[TARGET REACHED]";
+        case STATE_BUSTED:        return "[BUSTED]";
+    }
+    return "[?]";
+}
+
+string GetDirectionEmoji() {
+    if(!g_positionOpen) return "🎲";
+    int type = (int)PositionGetInteger(POSITION_TYPE);
+    return (type == POSITION_TYPE_BUY) ? "🟢" : "🔴";
+}
+
 void OnChartEvent(const int id, const ulong& lparam, const double& dparam, const string& sparam) {
-    if(id == CHARTEVENT_CHART_CHANGE) {
+    if(id == CHARTEVENT_CHART_CHANGE || id == CHARTEVENT_KEY) {
+        double progress = (g_currentCapital - InpStartCapital) / (InpTargetCapital - InpStartCapital) * 100.0;
+        progress = MathMax(0, MathMin(100, progress));
+
+        string sep = "────────────────────────";
+        string bar = "";
+        int barLen = 30;
+        int filled = (int)(progress / 100.0 * barLen);
+        for(int i = 0; i < barLen; i++) {
+            bar += (i < filled) ? "█" : "░";
+        }
+
         Comment(
-            "=== COIN FLIP EA ===\n",
-            "Capital: ", DoubleToStr(g_currentCapital, 2), " USC\n",
-            "Target:  ", DoubleToStr(InpTargetCapital, 2), " USC\n",
-            "───────────────\n",
-            "Trades: ", g_totalTrades, " (W:", g_wins, " L:", g_losses, ")\n",
-            "Winrate: ", DoubleToStr(GetWinrate(), 1), "%\n",
-            "───────────────\n",
-            "Risk: ", DoubleToStr(InpRiskUSC, 2), " USC | Reward: ", DoubleToStr(InpRewardUSC, 2), " USC\n",
-            "RR: 1:", DoubleToStr(InpRiskReward, 1), "\n",
-            "───────────────\n",
-            "EV per trade: ", DoubleToStr(CalculateExpectedValue(), 2), " USC\n",
-            "Total PnL: ", DoubleToStr(g_totalPnL, 2), " USC\n",
-            "───────────────\n",
-            "State: ",
-            (g_state == STATE_WAITING ? "WAITING" :
-             g_state == STATE_READY ? "READY" :
-             g_state == STATE_IN_TRADE ? "IN TRADE" :
-             g_state == STATE_TARGET_REACHED ? "TARGET REACHED!" :
-             "BUSTED!")
+            sep, "\n",
+            "  COIN FLIP EA (v1.0.0)", "\n",
+            sep, "\n\n",
+
+            "  Capital    : ", DoubleToStr(g_currentCapital, 2), " ", g_currency, "\n",
+            "  Target     : ", DoubleToStr(InpTargetCapital, 2), " ", g_currency, "\n",
+            "  Start      : ", DoubleToStr(InpStartCapital, 2), " ", g_currency, "\n\n",
+
+            "  Progress   : ", DoubleToStr(progress, 1), "%\n",
+            "  ", bar, "\n\n",
+
+            "  Trades     : ", g_totalTrades, " (W:", g_wins, " L:", g_losses, ")\n",
+            "  Winrate    : ", DoubleToStr(GetWinrate(), 1), "%\n",
+            "  Total PnL  : ", DoubleToStr(g_totalPnL, 2), " ", g_currency, "\n\n",
+
+            "  Risk       : ", DoubleToStr(InpRiskUSC, 2), " ", g_currency, "\n",
+            "  Reward     : ", DoubleToStr(InpRewardUSC, 2), " ", g_currency, "\n",
+            "  RR         : 1:", DoubleToStr(InpRiskReward, 1), "\n",
+            "  EV/trade   : ", DoubleToStr(CalculateExpectedValue(), 2), " ", g_currency, "\n\n",
+
+            "  ", GetDirectionEmoji(), " ", GetStateText(), "\n\n",
+
+            sep, "\n",
+            "  Heads(", InpHeadsSide, ")=BUY | Tails(", InpTailsSide, ")=SELL\n",
+            sep
         );
     }
 }
