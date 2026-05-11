@@ -9,6 +9,9 @@
 
 #include <Trade\Trade.mqh>
 
+//--- Include MTF + Market Structure Filter Module
+#include <MTF_Filter_MS.mqh>
+
 //+------------------------------------------------------------------+
 //| Digit & Pip Auto-Detect (MANDATORY)                              |
 //+------------------------------------------------------------------+
@@ -63,6 +66,7 @@ double     gRiskPoints = 0;
 double     gLotSize = 0;
 bool       gTp1Hit = false;
 CTrade     gTrade;
+CMSFilter  g_MSFilter;   // MTF + Market Structure Filter Instance
 
 //+------------------------------------------------------------------+
 //| ATR Calculation                                                  |
@@ -329,6 +333,9 @@ void OnTick() {
    // Manage positions every tick
    ManagePositions();
    
+   //=== REFRESH MTF + MARKET STRUCTURE FILTER ===
+   g_MSFilter.Refresh();
+   
    int openTrades = CountTrades();
    
    // Reset after trade closed
@@ -362,21 +369,45 @@ void OnTick() {
          int dir = 0;
          if (DetectPullbackEntry(dir)) {
             if (dir == 1 && gState == STATE_BREAKOUT_UP) {
+               //=== MTF + MARKET STRUCTURE FILTER CHECK ===
+               if(!g_MSFilter.AllowLong()) {
+                  Print("[MTF+MS] BUY signal BLOCKED — D1/H4 trend or structure not aligned");
+                  Print("[MTF+MS] Status: ", g_MSFilter.GetTrendInfo(), " | ", g_MSFilter.GetStructureInfo());
+                  gState = STATE_IDLE;
+                  break;
+               }
+               //=== END FILTER CHECK ===
                CalculateSLTP(dir);
                if (SendOrder(dir, gSLPrice, gTP2Price, gLotSize)) {
                   gState = STATE_ACTIVE_LONG;
                   gTp1Hit = false;
-                  Comment("Active LONG | Entry:", DoubleToStr(SymbolInfoDouble(_Symbol, SYMBOL_ASK), _Digits),
+                  Print("[MTF+MS] Trade opened. Trend: ", g_MSFilter.GetTrendInfo());
+                  Print("[MTF+MS] Structure: ", g_MSFilter.GetStructureInfo());
+                  Comment("Active LONG | MTF+MS: ", g_MSFilter.GetTrendInfo(),
+                          " | ", g_MSFilter.GetStructureInfo(),
+                          " | Entry:", DoubleToStr(SymbolInfoDouble(_Symbol, SYMBOL_ASK), _Digits),
                           " SL:", DoubleToStr(gSLPrice, _Digits),
                           " TP1:", DoubleToStr(gTP1Price, _Digits),
                           " TP2:", DoubleToStr(gTP2Price, _Digits));
                }
             } else if (dir == -1 && gState == STATE_BREAKOUT_DOWN) {
+               //=== MTF + MARKET STRUCTURE FILTER CHECK ===
+               if(!g_MSFilter.AllowShort()) {
+                  Print("[MTF+MS] SELL signal BLOCKED — D1/H4 trend or structure not aligned");
+                  Print("[MTF+MS] Status: ", g_MSFilter.GetTrendInfo(), " | ", g_MSFilter.GetStructureInfo());
+                  gState = STATE_IDLE;
+                  break;
+               }
+               //=== END FILTER CHECK ===
                CalculateSLTP(dir);
                if (SendOrder(dir, gSLPrice, gTP2Price, gLotSize)) {
                   gState = STATE_ACTIVE_SHORT;
                   gTp1Hit = false;
-                  Comment("Active SHORT | Entry:", DoubleToStr(SymbolInfoDouble(_Symbol, SYMBOL_BID), _Digits),
+                  Print("[MTF+MS] Trade opened. Trend: ", g_MSFilter.GetTrendInfo());
+                  Print("[MTF+MS] Structure: ", g_MSFilter.GetStructureInfo());
+                  Comment("Active SHORT | MTF+MS: ", g_MSFilter.GetTrendInfo(),
+                          " | ", g_MSFilter.GetStructureInfo(),
+                          " | Entry:", DoubleToStr(SymbolInfoDouble(_Symbol, SYMBOL_BID), _Digits),
                           " SL:", DoubleToStr(gSLPrice, _Digits),
                           " TP1:", DoubleToStr(gTP1Price, _Digits),
                           " TP2:", DoubleToStr(gTP2Price, _Digits));
@@ -398,10 +429,18 @@ void OnTick() {
 //| Initialization                                                    |
 //+------------------------------------------------------------------+
 int OnInit() {
+   // Initialize MTF + Market Structure Filter
+   if(g_MSFilter.Refresh() != INIT_SUCCEEDED) {
+      Print("[WARNING] MTF+MS Filter refresh issue — continuing");
+   }
+   
    gTrade.SetExpertMagicNumber(InpMagicNumber);
    gTrade.SetDeviationInPoints(3);
    Comment("BreakoutPullback EA | RangeBars:", InpRangeBars,
-           " | MinRange:", DoubleToStr(InpMinRange, 1), " pips | Risk:", InpRiskPercent, "%");
+           " | MinRange:", DoubleToStr(InpMinRange, 1), " pips | Risk:", InpRiskPercent, "%",
+           "\nMTF Filter: ", g_MTF_Enabled ? "ON" : "OFF",
+           " | Market Structure: ", g_MS_Enabled ? "ON" : "OFF",
+           "\n", g_MSFilter.GetFullInfo());
    gState = STATE_IDLE;
    return INIT_SUCCEEDED;
 }
