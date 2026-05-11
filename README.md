@@ -1,123 +1,65 @@
-# 7NAGA — 7 Candle GOLD Intraday Trading System
+# Omon-Omon Repo
 
-**Symbol:** GOLD (XAUUSD) | **Method:** Buy Stop + Sell Stop | **Version:** MQL4 + MQL5
-
----
-
-## Trading Rules
-
-### Time Settings
-- **Analysis:** 09:30 WIB (UTC+7)
-- **Expiry:** 17:00 WIB
-- **No trading on Monday**
-
-### Order Placement
-| Order | Source | Offset | Direction |
-|-------|--------|--------|-----------|
-| **Buy Stop** | HIGH (rounded UP to x5) | +100 points | Above |
-| **Sell Stop** | LOW (rounded DOWN to x5) | -25 points | Below |
-
-### Rounding Rule — KELIPATAN 5
-
-**HIGH -> Round UP (Buy Stop):**
-```
-02 -> 05 | 03 -> 05 | 04 -> 05 | 05 -> 05
-07 -> 10 | 08 -> 10 | 09 -> 10
-```
-
-**LOW -> Round DOWN (Sell Stop):**
-```
-03 -> 00 | 04 -> 00 | 05 -> 00
-07 -> 05 | 08 -> 05 | 09 -> 05
-```
-
-### TP Zones (6 Zones — 0.01 lot per zone)
-| Zone | Pips |
-|------|------|
-| TP1 | 10 |
-| TP2 | **15 (MIN)** |
-| TP3 | 30 |
-| TP4 | 50 |
-| TP5 | 100 |
-| TP6 | 200 |
-
-### TP Ideal
-```
-Spread = Buy Stop - Sell Stop
-TP Ideal = Spread / 2
--> Rounded to nearest TP zone
-```
-
-### Stop Loss (Oneshot)
-```
-Buy Stop  -> SL = Sell Stop price
-Sell Stop -> SL = Buy Stop price
-```
-
-### Distance Filter
-```
-MIN: 70 pips | MAX: 200 pips
-Outside range -> SKIP DAY
-```
-
-### Forbidden Conditions
-1. Monday — no open positions
-2. NFP release days
-3. FOMC Meeting days
-4. Powell speeches
-5. US CPI release days
-6. US Federal Holidays
+Koleksi EA (Expert Advisor) MQL4 & MQL5 untuk MetaTrader.
 
 ---
 
-## Example
+## Cara Request & Push File Baru
+
+### Alur Kerja
 
 ```
-HIGH = 2600.02 -> Rounded UP = 2600.05
-LOW  = 2590.03 -> Rounded DOWN = 2590.00
+1. Request coding EA
+   └── Kirim prompt / deskripsi strategi ke bot
+   
+2. Bot generate & buat file
+   └── File dibuat di ~/omon-omon/
+   
+3. Review & koreksi (opsional)
+   └── Test, minta revisi jika perlu
+   
+4. Push ke repo
+   └── git push origin main
+```
 
-Buy Stop  = 2600.05 + 100 = 2601.05
-Sell Stop = 2590.00 - 25  = 2589.75
+### Prompt Template
 
-Spread = 113 pips
-TP Ideal = 113 / 2 = 56.5 -> TP4 (50 pips)
+```
+Buat EA [nama] untuk [pair/timeframe]
+Strategy: [deskripsi]
+- Entry: [kondisi buy/sell]
+- Exit: [TP/SL]
+- Filter: [waktu/news/holiday]
+```
+
+### Contoh Prompt
+
+```
+Buat EA "GridX" untuk GOLD M1
+Strategy: Buy jika RSI < 30, Sell jika RSI > 70
+- TP: 10 pips, SL: 20 pips
+- Lot: 0.01 fix
+- Max 3 order per hari
+- Skip Senin & US Holiday
 ```
 
 ---
 
-## EA Features
-
-- Broker-agnostic virtual order system (broker cannot see SL/TP)
-- 6 TP zones with progressive partial close (0.01 per zone)
-- Virtual BE trigger at TP2+
-- Switching mode: cancel opposite pending when one triggers
-- News / US Holiday / Forbidden date filters
-- Auto-expire all positions at 17:00 WIB
-- Magic Number: `77777`
-
----
-
-## File Structure
+## Struktur Repo
 
 ```
-public-omon-omon/
-├── README.md
-├── SPEC.md
-├── soul.md
-├── MQL4/Experts/SevenCandleNaga.mq4
-└── MQL5/Experts/SevenCandleNaga.mq5
+omon-omon/
+├── README.md     ← kamu sekarang
+├── SPEC.md       ← list EA & deskripsi
+├── skill.md      ← scripttemplate coding
+├── soul.md       ← memory & preferensi
+├── MQL4/         ← EA untuk MT4
+└── MQL5/         ← EA untuk MT5
 ```
 
 ---
 
-## State Machine
+## File EA Publish
 
-```
-IDLE -> ANALYZING -> PLACING -> ACTIVE -> COMPLETED
-                    |
-              SKIPPED (forbidden/skip)
-```
-
----
-
-*7 candles. 1 direction. Zero compromise.*
+Gunakan repo ini untuk development & testing.  
+Repo stabil: [public-collection](https://github.com/Lybeedo/public-collection)

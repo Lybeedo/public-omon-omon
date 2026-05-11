@@ -1,73 +1,57 @@
-# 7NAGA — Specification
+# SPEC — Strategy & EA List
 
-## Overview
-- **Name:** 7NAGA
-- **Symbol:** GOLD (XAUUSD)
-- **Timeframe:** Intraday (H1/M5)
-- **Method:** Buy Stop + Sell Stop
-- **Analysis:** 09:30 WIB | **Expiry:** 17:00 WIB
-- **Platforms:** MQL4 + MQL5
+## Published EAs
 
----
+### 7NAGA
+**File:** `MQL4/Experts/SevenCandleNaga.mq4`, `MQL5/Experts/SevenCandleNaga.mq5`  
+**Symbol:** GOLD (XAUUSD) | **Timeframe:** Intraday  
+**Method:** Buy Stop + Sell Stop berbasis HIGH/LOW 7 candle M1
 
-## Core Rules
-
-### Order Logic
-```
-HIGH -> Round UP (kelipatan 5) -> +100 pts -> BUY STOP
-LOW  -> Round DOWN (kelipatan 5) -> -25 pts -> SELL STOP
-```
-
-### Rounding (Kelipatan 5)
-```
-HIGH UP:  02-05 -> 05 | 07-10 -> 10
-LOW DOWN: 03-00 -> 00 | 07-05 -> 05 | 02-00 -> 00
-```
-
-### TP Zones
-| Zone | Pips |
-|------|------|
-| TP1 | 10 |
-| TP2 | **15 (MIN)** |
-| TP3 | 30 |
-| TP4 | 50 |
-| TP5 | 100 |
-| TP6 | 200 |
-
-### TP Ideal
-```
-Spread = Buy Stop - Sell Stop
-TP Ideal = Spread / 2 -> nearest zone
-```
-
-### Stop Loss (Oneshot)
-```
-Buy Stop  SL = Sell Stop
-Sell Stop SL = Buy Stop
-```
-
-### Distance
-```
-MIN: 70 pips | MAX: 200 pips
-Outside -> SKIP DAY
-```
-
-### Forbidden
-- Monday, NFP, FOMC, Powell, US CPI, US Federal Holidays
+**Rules:**
+- Analisis: 09:30 WIB | Expiry: 17:00 WIB
+- Buy Stop = HIGH (kelipatan 5) + 100 pts
+- Sell Stop = LOW (kelipatan 5) - 25 pts
+- SL = oneshot (Buy SL = Sell Stop, Sell SL = Buy Stop)
+- 6 zona TP: 10/15/30/50/100/200 pips (0.01 lot per zona)
+- Filter: Senin, NFP, FOMC, CPI, US Holiday
+- Distance: 70-200 pips (outside = skip)
 
 ---
 
-## State Machine
-```
-IDLE -> ANALYZING -> PLACING -> ACTIVE -> COMPLETED/SKIPPED
-```
+### CoinFlipEA
+**File:** `MQL5/Experts/CoinFlipEA.mq5`  
+**Symbol:** Multi-pair | **Timeframe:** Configurable (M1 default)  
+**Method:** Flip trading dengan kapitalisasi
 
-## Files
-```
-public-omon-omon/
-├── README.md
-├── SPEC.md
-├── soul.md
-├── MQL4/Experts/SevenCandleNaga.mq4
-└── MQL5/Experts/SevenCandleNaga.mq5
-```
+**Rules:**
+- Start: $500 → Target: $5000
+- RR 1:2 — Risk $50, Reward $100
+- Lot sizing otomatis berdasarkan risk per trade
+- Flip trigger: new candle / instant
+- Filter sesi: Asia, London, New York (opsional)
+- Stop on bust atau target reached
+
+---
+
+### 7NAGA Telegram Signal
+**File:** `MQL5/Experts/SevenNagaSignal_MQ5.mq5`  
+**Symbol:** GOLD (XAUUSD) | **Timeframe:** M30  
+**Method:** Indikator + auto-send signal ke Telegram
+
+**Rules:**
+- Ambil HIGH/LOW dari N candle terakhir (default: 7)
+- Kirim pesan ke Telegram: Buy Stop price, Sell Stop price
+- Gambar garis HIGH (merah) dan LOW (hijau) di chart
+- Skip Senin jika enabled
+- Configurable: WIB offset, hour send, pip offset
+
+---
+
+## Under Development
+
+### mentahan/
+Koleksi EA mentah / baseline untuk referensi:
+- `MTF_Trend_Confluence.mq4`
+- `Murray Expert v6.mq4`
+- `Prime_Quantum_AI.mq5`
+- `RoyalHegen_EA.mq5`
