@@ -1,106 +1,60 @@
-# Breakout & Pullback EA — SPEC.md
+# SPEC — EA Strategy List
 
-## Concept & Vision
-EA Gold (XAUUSD) berbasis strategi Breakout and Pullback. Menunggu konfigurasi range/breakout candle, lalu pullback ke level yang di-break sebagai entry. Target: risk-reward 1:2, single trade per sinyal, no averaging. Sederhana, robust, tidak over-optimized.
-
----
-
-## Strategy Rules
-
-### Setup Detection (Range)
-- Ambil **N bars** terakhir (default: 20) sebagai range period
-- Tentukan **Highest High** dan **Lowest Low** dari range tersebut
-- Range valid jika: High - Low >= MinRange pips (default: 100 pips XAUUSD)
-
-### Breakout Confirmation
-- candle saat ini (close) BREAK acima Highest High = breakout atas
-- candle saat ini (close) BREAK abaixo Lowest Low = breakout bawah
-- Hanya sinyal pertama yang diproses per bar (no repaint)
-
-### Pullback Entry (yang valid)
-- Setelah breakout terjadi, tunggu price RETEST level yang di-break
-- Retest: price kembali menyentuh/mendekati level highest/lowest dalam 1-5 candle setelah breakout
-- Entry dilakukan saat price confirm retest (close candle retest)
-
-### Entry Types
-- **Buy**: Breakout atas + retest ke atas (price halten + naik)
-- **Sell**: Breakout bawah + retest ke bawah (price halten + turun)
-
-### Stop Loss
-- Buy SL: below retest low atau lowest low - atr_offset pips
-- Sell SL: above retest high atau highest high + atr_offset pips
-- Default ATR multiplier: 1.5x
-
-### Take Profit
-- TP1: 1R (risk reward 1:1)
-- TP2: 2R (risk reward 1:2)
-- Split lot: 50% di TP1 (move BE), 50% di TP2
+Deskripsi strategy ditulis di sini setelah EA selesai dibuat.
 
 ---
 
-## Parameters
+## 7NAGA
+**File:** `MQL4/Experts/SevenCandleNaga.mq4`, `MQL5/Experts/SevenCandleNaga.mq5`  
+**Symbol:** GOLD (XAUUSD) | **Timeframe:** Intraday (M1)  
+**Method:** Buy Stop + Sell Stop
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `InpRangeBars` | 20 | Jumlah bars untuk deteksi range |
-| `InpMinRange` | 100.0 | Min jarak HIGH-LOW (pips) |
-| `InpRetestBars` | 5 | Max candle untuk retest setelah breakout |
-| `InpATROffset` | 1.5 | ATR multiplier untuk SL |
-| `InpATRPeriod` | 14 | Period ATR |
-| `InpRiskPercent` | 2.0 | Risk per trade (%) |
-| `InpMaxSpread` | 30 | Max spread (pips) untuk eksekusi |
-| `InpMagicNumber` | 99999 | ID EA |
-| `InpMaxTrades` | 1 | Max open trade |
-
----
-
-## Time Filter
-- Trading aktif: 00:00 - 23:00 (all sessions)
-- Skip news alto-impact: NFP, FOMC, US CPI (opsional, ditandai komentar)
+**Rules:**
+- Analisis: 09:30 WIB | Expiry: 17:00 WIB
+- Buy Stop = HIGH (kelipatan 5) + 100 pts
+- Sell Stop = LOW (kelipatan 5) - 25 pts
+- SL = oneshot
+- 6 zona TP: 10/15/30/50/100/200 pips (0.01 lot per zona)
+- Filter: Senin, NFP, FOMC, CPI, US Holiday
+- Distance: 70-200 pips (outside = skip)
 
 ---
 
-## State Machine
-```
-IDLE → SETUP_DETECTED → BREAKOUT_CONFIRMED → PULLBACK_ENTRY → ACTIVE → TP1_HIT → TP2_HIT
-```
+## CoinFlipEA
+**File:** `MQL5/Experts/CoinFlipEA.mq5`  
+**Symbol:** Multi-pair | **Timeframe:** Configurable (M1 default)  
+**Method:** Flip trading dengan kapitalisasi
+
+**Rules:**
+- Start: $500 → Target: $5000
+- RR 1:2 — Risk $50, Reward $100
+- Lot sizing otomatis berdasarkan risk
+- Flip trigger: new candle / instant
+- Filter sesi: Asia, London, New York
 
 ---
 
-## File Layout
-```
-public-omon-omon/
-├── README.md
-├── SPEC.md
-├── MQL4/Experts/BreakoutPullback.mq4
-└── MQL5/Experts/BreakoutPullback.mq5
-```
+## 7NAGA Signal
+**File:** `MQL5/Experts/SevenNagaSignal_MQ5.mq5`  
+**Symbol:** GOLD (XAUUSD) | **Timeframe:** M30  
+**Method:** Indikator + auto-send signal ke Telegram
+
+**Rules:**
+- Ambil HIGH/LOW dari 7 candle terakhir
+- Kirim pesan ke Telegram: Buy Stop price, Sell Stop price
+- Gambar garis HIGH (merah) dan LOW (hijau)
+- Skip Senin
 
 ---
 
-## Auto-Detect Digit & Pip (MANDATORY)
-**MQL5:**
-```cpp
-int    GDigits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-double GPoint  = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-double GPip    = (GDigits == 3 || GDigits == 5) ? GPoint * 10 : GPoint;
-```
+## Breakout & Pullback
+**File:** `MQL4/Experts/BreakoutPullback.mq4`, `MQL5/Experts/BreakoutPullback.mq5`  
+**Symbol:** GOLD (XAUUSD) | **Timeframe:** H1  
+**Method:** Breakout range + retest entry
 
-**MQL4:**
-```mql4
-#define GDigits ((int)MarketInfo(_Symbol, MODE_DIGITS))
-#define GPoint  (MarketInfo(_Symbol, MODE_POINT))
-#define GPip    ((GDigits == 3 || GDigits == 5) ? GPoint * 10 : GPoint)
-```
-
----
-
-## Risk Management
-- Lot dihitung: `Risk = AccountEquity * (InpRiskPercent / 100)` → lot = Risk / (distance_SL * GPip)
-- Max 1 posisi aktif per magic
-- SL wajib selalu ada, TP per split-lot
-
----
-
-## Disclaimer
-Stratégia ini NON-GARANSI. Backtest dulu sebelum live. Pasti ada drawdown.
+**Rules:**
+- Range: 20 bar | Min range: 100 pips
+- Entry: Pullback ke level yang di-break
+- SL: ATR 14 x 1.5
+- TP: 1R (50%) + 2R (50%)
+- Lot: Risk 2%

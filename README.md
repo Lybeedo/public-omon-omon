@@ -1,53 +1,81 @@
-# Breakout & Pullback EA
+# Omon-Omon Repo
 
-**Gold (XAUUSD) | H1 Timeframe | MQL4 + MQL5**
-
-## Strategy Overview
-
-**Breakout + Pullback Entry** — Menunggu konfigurasi range, breakout level high/low, lalu retest sebagai entry signal.
-
-```
-Range Detection (20 bars) → Breakout Confirmed → Pullback Entry → SL/2TP
-```
-
-## Rules
-
-1. **Range Detection**: Ambil 20 bar terakhir, cari HIGH dan LOW
-2. **Breakout**: Candle close di atas Highest High (buy) atau di bawah Lowest Low (sell)
-3. **Pullback**: Price retest level breakout + confirm candle direction
-4. **Entry**: Market order saat pullback terkonfirmasi
-5. **SL**: ATR-based (1.5x multiplier dari ATR period 14)
-6. **TP**: Split lot — TP1 di 1R (50% close + move BE), TP2 di 2R (50% remaining)
-
-## Parameters
-
-| Parameter | Default | Deskripsi |
-|-----------|---------|-----------|
-| `InpRangeBars` | 20 | Jumlah bar untuk deteksi range |
-| `InpMinRange` | 100 pips | Min jarak HIGH-LOW |
-| `InpRetestBars` | 5 | Max candle untuk retest |
-| `InpATROffset` | 1.5 | ATR multiplier untuk SL |
-| `InpATRPeriod` | 14 | Period ATR |
-| `InpRiskPercent` | 2% | Risk per trade |
-| `InpMaxSpread` | 30 | Max spread untuk eksekusi |
-| `InpMagicNumber` | 99999 | EA ID |
-| `InpMaxTrades` | 1 | Max open posisi |
-
-## Files
-
-```
-MQL4/Experts/BreakoutPullback.mq4  — MT4 version
-MQL5/Experts/BreakoutPullback.mq5  — MT5 version
-```
-
-## Disclaimer
-
-EA ini NON-GARANSI. Backtest dulu sebelum live. Pasti ada drawdown.
+Koleksi EA (Expert Advisor) MQL4 & MQL5 untuk MetaTrader.
 
 ---
 
-## Other EAs in this repo
+## Cara Request File Baru & Push ke Repo
 
-- **7NAGA** — 7 Candle GOLD Intraday EA (buy stop / sell stop system)
-- **CoinFlipEA** — Simple Martingale flip coin system
+### Alur Kerja
 
+```
+1. Request
+   Kirim prompt / deskripsi strategi ke bot
+
+2. Bot Generate
+   Bot buat file EA di ~/omon-omon/
+
+3. Review & Koreksi
+   Test, minta revisi jika perlu
+
+4. Push ke Repo
+   git push origin main
+```
+
+---
+
+### Prompt Template
+
+```
+Buat EA [nama] untuk [pair] [timeframe]
+Strategy: [deskripsi singkat]
+- Entry: [kondisi buy/sell]
+- Exit: [TP/SL]
+- Filter: [waktu/news/holiday]
+- Lot: [fixed/risk-based]
+```
+
+### Contoh Prompt
+
+**Sederhana:**
+```
+Buat EA "GridX" untuk GOLD M1
+Strategy: Buy jika RSI < 30, Sell jika RSI > 70
+- TP: 10 pips, SL: 20 pips
+- Lot: 0.01 fix
+```
+
+**Lengkap:**
+```
+Buat EA "BreakoutX" untuk GOLD H1
+Strategy: Breakout highest high 20 bar + pullback entry
+- Range: 20 bar
+- Entry: Pullback ke level yang di-break
+- SL: ATR 14 x 1.5
+- TP: 1R (TP1) + 2R (TP2)
+- Lot: Risk 2%
+- Filter: Skip high-impact news
+- Max 1 trade per sinyal
+```
+
+---
+
+## Struktur Repo
+
+```
+omon-omon/
+├── README.md     ← kamu sekarang
+├── SPEC.md       ← list EA & strategy
+├── skill.md      ← script template
+├── soul.md       ← memory & preferensi
+├── MQL4/         ← EA MT4
+└── MQL5/         ← EA MT5
+```
+
+---
+
+## Catatan
+
+- Repo ini untuk development & testing
+- Repo stabil (hanya README): [public-collection](https://github.com/Lybeedo/public-collection)
+- Setelah EA selesai, strategy-nya ditulis di SPEC.md
