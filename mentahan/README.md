@@ -1,6 +1,6 @@
 # MENTAHAN — Raw / Unprocessed EAs & Indicators
 
-Folder ini berisi file EA/indicator mentah yang belum diproses atau diintegrasikan ke dalam sistem 7NAGA. Setiap file adalah kandidat untuk dipelajari, dimodifikasi, atau di-backtest.
+Folder ini berisi file EA/indicator mentah yang belum diproses. Setiap file adalah kandidat untuk dipelajari, dimodifikasi, atau di-backtest.
 
 ---
 
