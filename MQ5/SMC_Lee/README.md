@@ -11,7 +11,7 @@
 ## 📁 Struktur Folder
 
 ```
-mq5/SMC_Lee/
+MQ5/SMC_Lee/
 ├── Experts/                     ← EA (Expert Advisors) — 17 files
 ├── Indicators/                  ← Custom Indicators
 ├── Include/indi/                ← VPA Include indicators
