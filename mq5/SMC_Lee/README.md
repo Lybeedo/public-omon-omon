@@ -3,30 +3,31 @@
 
 ```
 ╔════════════════════════════════════════════════════════════╗
-║         SMC_Lee — Smart Money Concept + FVG Hybrid          ║
-║               Institutional Grade Trading System           ║
+║         SMC_Lee — Smart Money Concept + Joe Ross           ║
+║            Institutional Grade Trading System              ║
 ╚════════════════════════════════════════════════════════════╝
 ```
 
 ## 📁 Struktur Folder
 
 ```
-MQL5/SMC_Lee/
-├── Experts/                     ← EA (Expert Advisors)
-├── Indicators/                 ← Custom Indicators
-├── Include/indi/               ← Included indicators (VPA, etc.)
-├── Scripts/                    ← Utility scripts
-├── Prompts/                    ← AI analysis prompt templates
-└── TradingView/                 ← Pine Script v6
+mq5/SMC_Lee/
+├── Experts/                     ← EA (Expert Advisors) — 17 files
+├── Indicators/                  ← Custom Indicators
+├── Include/indi/                ← VPA Include indicators
+├── Scripts/                     ← Utility scripts
+├── Prompts/                     ← AI analysis prompt templates
+└── TradingView/                  ← Pine Script v6
 ```
 
 ---
 
-## 📦 Experts (EA) — 16 Files
+## 📦 Experts (EA) — 17 Files
 
 | EA | Deskripsi |
 |----|-----------|
-| `EA_SMC_FVG_Hybrid.mq5` | **MAIN** — SMC + FVG hybrid auto-trading EA |
+| `EA_SMC_FVG_Hybrid.mq5` | **MAIN** — SMC + FVG hybrid auto-trading |
+| `EA_JoeRoss_Hooks.mq5` | **NEW** — Joe Ross 1-2-3 + Ross Hooks EA |
 | `3Musketeer.mq5` | Triple timeframe strategy EA |
 | `3MusketeerPro.mq5` | Enhanced 3 Musketeer version |
 | `AK_RPG.mq5` | RPG-based trading EA |
@@ -116,6 +117,31 @@ C:/Users/[USER]/AppData/Roaming/MetaQuotes/Terminal/[ID]/MQL5/Experts/
 - ✅ Volume spike filter
 - ✅ Lot sizing from risk %
 - ✅ Auto breakeven move
+- ✅ Live dashboard on chart
+
+---
+
+## 🤖 EA_JoeRoss_Hooks — Quick Start
+
+**Strategi:** Joe Ross 1-2-3 Pattern + Ross Hooks Entry
+
+**Parameter utama:**
+- `InpSwingPeriod` = 5
+- `InpFibExt1/2/3` = 127% / 161% / 200% (Fibonacci TP)
+- `InpAtrMultSL` = 1.5
+- `InpRiskPercent` = 1.0%
+- `InpTradeMode` = HYBRID
+
+**Fitur:**
+- ✅ Bullish & Bearish 1-2-3 detection
+- ✅ Ross Hook entry (wait for hook break!)
+- ✅ Reversal Hook trading
+- ✅ EMA trend filter (8/21/50)
+- ✅ Volume spike filter
+- ✅ Fibonacci Extensions TP
+- ✅ ATR-based SL with natural S/R
+- ✅ Swing/Scalp/Hybrid mode
+- ✅ Breakeven move + partial close
 - ✅ Live dashboard on chart
 
 ---
