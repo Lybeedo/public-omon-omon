@@ -1,0 +1,760 @@
+// ─────────────────────────────────────────────
+//  SMC + FVG Hybrid Analyzer v1.0
+//  Fungsi: Institutional-grade SMC + Fair Value Gap analysis
+//          Multi-TF, auto-detect mode (Swing/Scalp/Hybrid)
+//          Full markdown report generation
+// ─────────────────────────────────────────────
+//@version=6
+
+// ============================================
+//  1. PERUBAHAN: SETTINGS (GRUP & INPUT)
+// ============================================
+grp_smc     = "🏗️ SMC Settings"
+grp_fvg     = "🔍 FVG Settings"
+grp_mtf     = "📊 Multi-TF Settings"
+grp_tm      = "⏱️ Trade Management"
+grp_report  = "📋 Report Settings"
+grp_vis     = "🎨 Visual Settings"
+
+useVolFilter = input.bool(true, "Volume Spike Filter",  group=grp_smc)
+volMult      = input.float(1.5, "Volume Spike Multiplier", step=0.1, group=grp_smc)
+atrLen       = input.int(14, "ATR Length", group=grp_smc)
+atrMultSL    = input.float(1.5, "ATR SL Multiplier", step=0.1, group=grp_smc)
+atrMultTP    = input.float(2.5, "ATR TP Multiplier", step=0.1, group=grp_smc)
+
+fvgLookback  = input.int(3, "FVG Lookback Bars", group=grp_fvg)
+fvgThreshold = input.float(0.5, "FVG Min Gap Size (% ATR)", step=0.1, group=grp_fvg)
+
+htf1Timeframe = input.timeframe("D", "HTF-1 (Bias)", group=grp_mtf)
+htf2Timeframe = input.timeframe("4H", "HTF-2 (Structure)", group=grp_mtf)
+
+riskPct     = input.float(1.0, "Risk per Trade (%)", step=0.1, group=grp_tm)
+maxLots     = input.float(2.0, "Max Lot Size", step=0.01, group=grp_tm)
+maxPos      = input.int(3, "Max Open Positions", group=grp_tm)
+
+showFVG     = input.bool(true, "Show FVG Zones", group=grp_vis)
+showStruct  = input.bool(true, "Show Market Structure", group=grp_vis)
+showBOS     = input.bool(true, "Show BOS/CHoCH", group=grp_vis)
+showOB      = input.bool(true, "Show Order Blocks", group=grp_vis)
+showEq      = input.bool(true, "Show Equilibrium Lines", group=grp_vis)
+showLabels  = input.bool(true, "Show Labels & Lines", group=grp_vis)
+bullColor   = input.color(color.new(color.green, 80), "Bullish Color", group=grp_vis)
+bearColor   = input.color(color.new(color.red, 80), "Bearish Color", group=grp_vis)
+fvgBullCol  = input.color(color.new(#00FFAA, 85), "FVG Bullish Color", group=grp_vis)
+fvgBearCol  = input.color(color.new(#FF4444, 85), "FVG Bearish Color", group=grp_vis)
+obBullCol   = input.color(color.new(#00BFFF, 85), "OB Bullish Color", group=grp_vis)
+obBearCol   = input.color(color.new(#FF8C00, 85), "OB Bearish Color", group=grp_vis)
+
+// ============================================
+//  2. PERUBAHAN: CORE LIBRARY — MATH & UTILS
+// ============================================
+
+// --- ATR ---
+atr = ta.atr(atrLen)
+
+// --- Volume Spike Detection ---
+volMA = ta.sma(volume, 20)
+isVolSpike = volume > volMA * volMult and useVolFilter
+
+// --- EMA Ribbon ---
+ema8   = ta.ema(close, 8)
+ema21  = ta.ema(close, 21)
+ema50  = ta.ema(close, 50)
+ema200 = ta.ema(close, 200)
+
+// --- Trend Strength ---
+trendScore = math.round(
+     (ema8 > ema21 ? 1 : -1) +
+     (ema21 > ema50 ? 1 : -1) +
+     (close > ema50 ? 1 : -1) +
+     (ema50 > ema200 ? 1 : -1) +
+     (ema8 > ema50 ? 1 : -1)
+ )
+
+// ============================================
+//  3. PERUBAHAN: MARKET STRUCTURE DETECTION
+//     (Swing High/Low, BOS, CHoCH)
+// ============================================
+periodStruct = input.int(5, "Swing Pivot Period", group=grp_smc)
+
+ph = ta.pivothigh(high, periodStruct, periodStruct)
+pl = ta.pivotlow(low, periodStruct, periodStruct)
+
+// --- Recent Swing Points ---
+var float lastSwingHigh = na
+var float lastSwingLow  = na
+var int   lastSwingHighIdx = na
+var int   lastSwingLowIdx  = na
+
+if not na(ph)
+    lastSwingHigh    := ph
+    lastSwingHighIdx := bar_index - periodStruct
+if not na(pl)
+    lastSwingLow     := pl
+    lastSwingLowIdx  := bar_index - periodStruct
+
+// --- BOS Detection ---
+var int bosDir = 0  // 1=bull, -1=bear, 0=neutral
+var float bosLevel = na
+var bool newBOS = false
+
+// Detect BOS: break above last swing high = Bull BOS, break below = Bear BOS
+bullBOS = close > lastSwingHigh and not na(lastSwingHigh) and bar_index > lastSwingHighIdx + periodStruct
+bearBOS = close < lastSwingLow  and not na(lastSwingLow)  and bar_index > lastSwingLowIdx  + periodStruct
+
+if bullBOS and bosDir != 1
+    bosDir  := 1
+    bosLevel := close
+    newBOS  := true
+if bearBOS and bosDir != -1
+    bosDir  := -1
+    bosLevel := close
+    newBOS  := true
+
+// --- CHoCH (Change of Character) ---
+var bool bullCHoCH = false
+var bool bearCHoCH = false
+
+if bosDir == 1 and close < lastSwingLow and not na(lastSwingLow)
+    bullCHoCH := true
+if bosDir == -1 and close > lastSwingHigh and not na(lastSwingHigh)
+    bearCHoCH := true
+
+// ============================================
+//  4. PERUBAHAN: FAIR VALUE GAP (FVG) DETECTION
+//     Fair Value Gap = candle N low > candle N-2 high (bullish)
+//                    atau  candle N high < candle N-2 low (bearish)
+// ============================================
+type FVG
+    int   idx
+    float top
+    float bottom
+    string direction
+    float size
+
+var FVG[] bullishFVGs = array.new<FVG>()
+var FVG[] bearishFVGs = array.new<FVG>()
+
+detectFVG() =>
+    bool bullFVG = false
+    bool bearFVG = false
+    float bullTop = na
+    float bullBot = na
+    float bearTop = na
+    float bearBot = na
+
+    if bar_index >= 2
+        float gapSize = atr * fvgThreshold / 100
+
+        // Bullish FVG: current low > high 2 bars ago
+        float gap = low - high[2]
+        bullFVG := gap > gapSize
+        if bullFVG
+            bullTop := high[1]
+            bullBot := math.max(low, low[1])
+
+        // Bearish FVG: current high < low 2 bars ago
+        float gapB = low[2] - high
+        bearFVG := gapB > gapSize
+        if bearFVG
+            bearTop := math.min(high, high[1])
+            bearBot := low[1]
+
+    [bullFVG, bearFVG, bullTop, bullBot, bearTop, bearBot]
+
+[bullFVGDet, bearFVGDet, bullTop, bullBot, bearTop, bearBot] = detectFVG()
+
+if bullFVGDet
+    array.push(bullishFVGs, FVG.new(bar_index, bullTop, bullBot, "bullish", bullTop - bullBot))
+if bearFVGDet
+    array.push(bearishFVGs, FVG.new(bar_index, bearTop, bearBot, "bearish", bearTop - bearBot))
+
+// Prune old FVGs (keep last 10)
+if array.size(bullishFVGs) > 10
+    array.shift(bullishFVGs)
+if array.size(bearishFVGs) > 10
+    array.shift(bearishFVGs)
+
+// --- FVG Reliability ---
+fvgReliability(fvgSize) =>
+    float rel = math.min(100, math.round(fvgSize / (atr * 0.5) * 100))
+    rel
+
+// ============================================
+//  5. PERUBAHAN: ORDER BLOCKS DETECTION
+//     Order Block = 2-3 candle consolidation sebelum move besar
+// ============================================
+var float bullOBHigh = na
+var float bullOBLow  = na
+var float bearOBHigh = na
+var float bearOBLow  = na
+var int   bullOBIdx  = na
+var int   bearOBIdx  = na
+
+detectOrderBlocks() =>
+    // Bullish OB: strong bullish candle followed by pullback
+    bool bullOB = false
+    bool bearOB = false
+
+    if bar_index >= 5
+        // Check for bullish engulfing or strong bullish bar
+        float bodySize = math.abs(close - open)
+        float rangeSize = high - low
+        bool strongBull = (close > open) and bodySize > rangeSize * 0.7
+
+        // Next bars: price pulled back, now detecting OB
+        if strongBull and isVolSpike
+            bullOBHigh := high[1]
+            bullOBLow  := math.min(open, close)
+            bullOBIdx  := bar_index - 1
+
+        bool strongBear = (close < open) and bodySize > rangeSize * 0.7
+        if strongBear and isVolSpike
+            bearOBHigh := math.max(open, close)
+            bearOBLow  := low[1]
+            bearOBIdx  := bar_index - 1
+
+    [bullOB, bearOB]
+
+[bullOBDet, bearOBDet] = detectOrderBlocks()
+
+// ============================================
+//  6. PERUBAHAN: LIQUIDITY SWEEPS DETECTION
+//     Liquidity = sweep of swing highs/lows / order blocks
+// ============================================
+var bool liquiditySweepHigh = false
+var bool liquiditySweepLow  = false
+
+// Sweep: price exceeds last swing high by > 50% ATR then reverses
+liquiditySweepHigh := high > lastSwingHigh + atr * 0.3 and close < lastSwingHigh and not na(lastSwingHigh)
+liquiditySweepLow  := low  < lastSwingLow  - atr * 0.3 and close > lastSwingLow  and not na(lastSwingLow)
+
+// ============================================
+//  7. PERUBAHAN: HTF (HIGHER TIMEFRAME) ANALYSIS
+//     request.security untuk D + 4H context
+// ============================================
+
+// HTF EMA on D
+[float, float, float, float, float] request.security(syminfo.tickerid, htf1Timeframe, expression=close, gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+htf1Close = request.security(syminfo.tickerid, htf1Timeframe, expression=close, gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+htf1Open  = request.security(syminfo.tickerid, htf1Timeframe, expression=open,  gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+htf1High  = request.security(syminfo.tickerid, htf1Timeframe, expression=high,  gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+htf1Low   = request.security(syminfo.tickerid, htf1Timeframe, expression=low,   gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+htf1EMA50 = request.security(syminfo.tickerid, htf1Timeframe, expression=ta.ema(close, 50),  gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+htf1EMA200= request.security(syminfo.tickerid, htf1Timeframe, expression=ta.ema(close, 200), gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+
+// HTF EMA on 4H
+htf2Close = request.security(syminfo.tickerid, htf2Timeframe, expression=close, gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+htf2Open  = request.security(syminfo.tickerid, htf2Timeframe, expression=open,  gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+htf2High  = request.security(syminfo.tickerid, htf2Timeframe, expression=high,  gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+htf2Low   = request.security(syminfo.tickerid, htf2Timeframe, expression=low,   gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+htf2EMA50 = request.security(syminfo.tickerid, htf2Timeframe, expression=ta.ema(close, 50),  gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+htf2EMA200= request.security(syminfo.tickerid, htf2Timeframe, expression=ta.ema(close, 200), gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on)
+
+// --- HTF Bias ---
+htfBias() =>
+    string bias = "NEUTRAL"
+    bias := htf1Close > htf1EMA50 and htf1EMA50 > htf1EMA200 ? "BULLISH" :
+         htf1Close < htf1EMA50 and htf1EMA50 < htf1EMA200 ? "BEARISH" : "NEUTRAL"
+    bias
+
+htfBiasLabel = htfBias()
+
+// ============================================
+//  8. PERUBAHAN: MODE DETECTION (SWING / SCALP / HYBRID)
+// ============================================
+detectMode() =>
+    string mode = "HYBRID"
+    // Swing: wider SL, longer hold, D/4H alignment
+    // Scalp: tight SL, quick TP, M5/M1 alignment
+    // Hybrid: HTF bias + LTF execution
+
+    // Measure volatility
+    float volRatio = atr / close * 100
+
+    // Trend strength from HTF
+    int htfAlignment = 0
+    htfAlignment += htf1Close > htf1EMA50 ? 1 : -1
+    htfAlignment += htf2Close > htf2EMA50 ? 1 : -1
+    htfAlignment += htf1Close > htf1EMA200 ? 1 : -1
+    htfAlignment += htf2Close > htf2EMA200 ? 1 : -1
+
+    // If strong HTF trend alignment -> HYBRID mode
+    if htfAlignment >= 3 and volRatio < 0.3
+        mode := "HYBRID"
+    else if volRatio >= 0.3
+        mode := "SCALP"
+    else
+        mode := "SWING"
+
+    [mode, htfAlignment]
+
+[modeDetected, htfAlignScore] = detectMode()
+
+// ============================================
+//  9. PERUBAHAN: BIAS & DIRECTION REASONING
+// ============================================
+getBias() =>
+    string bias = "NEUTRAL"
+    int score = 0
+
+    // EMA alignment score
+    score += ema8 > ema21 ? 1 : -1
+    score += ema21 > ema50 ? 1 : -1
+    score += close > ema50 ? 1 : -1
+    score += ema50 > ema200 ? 1 : -1
+    score += close > open ? 1 : -1
+
+    // HTF contribution
+    score += htfBiasLabel == "BULLISH" ? 2 :
+         htfBiasLabel == "BEARISH" ? -2 : 0
+
+    // Structure contribution
+    score += bosDir == 1 ? 2 : bosDir == -1 ? -2 : 0
+    score += bullCHoCH ? 1 : bearCHoCH ? -1 : 0
+
+    // Volume confirmation
+    score += isVolSpike ? 1 : -1
+
+    bias := score >= 3 ? "BULLISH" :
+         score <= -3 ? "BEARISH" : "NEUTRAL"
+
+    [bias, score]
+
+[biasDetected, biasScore] = getBias()
+
+// ============================================
+//  10. PERUBAHAN: ZONE SCORING (Smart Money Confidence)
+// ============================================
+zoneScore(zoneTop, zoneBottom) =>
+    float score = 50
+    float zoneSize = zoneTop - zoneBottom
+    float relativeSize = zoneSize / atr
+
+    // Larger zones = more institutional = higher score
+    score += relativeSize * 10
+    // Clamp
+    score := math.max(0, math.min(100, score))
+
+// ============================================
+//  11. PERUBAHAN: TRADE SETUP GENERATOR
+//     (Entry, SL, TP, Lot Size, R:R, Order Type)
+// ============================================
+type TradeSetup
+    string direction
+    float entryPrice
+    float stopLoss
+    float takeProfit1
+    float takeProfit2
+    float takeProfit3
+    float rrRatio
+    float lotSize
+    string orderType
+    string reasoning
+    int confidence
+
+generateSetup() =>
+    TradeSetup ts = TradeSetup.new()
+    float curPrice = close
+    float entry = na
+    float sl = na
+    float tp1 = na
+    float tp2 = na
+    float tp3 = na
+    string dir = "NONE"
+    string oType = "LIMIT"
+    string reasoning = ""
+    int conf = 5
+
+    if biasDetected == "BULLISH" and (bullFVGDet or bullCHoCH or bullBOS)
+        dir := "BUY"
+        entry := showFVG and array.size(bullishFVGs) > 0 ? array.get(bullishFVGs, array.size(bullishFVGs) - 1).bottom : close
+        sl    := math.min(lastSwingLow - atr * 0.5, close - atr * atrMultSL)
+        tp1   := close + atr * atrMultTP * 0.5
+        tp2   := close + atr * atrMultTP
+        tp3   := close + atr * atrMultTP * 1.5
+        oType := modeDetected == "SCALP" ? "MARKET" : "LIMIT"
+        reasoning := "Bullish bias confirmed | FVG/CHoCH present | Volume spike | HTF: " + htfBiasLabel
+        conf := math.min(10, 6 + (isVolSpike ? 2 : 0) + (bullCHoCH ? 1 : 0) + (array.size(bullishFVGs) > 0 ? 1 : 0))
+        conf := math.max(1, conf)
+
+    if biasDetected == "BEARISH" and (bearFVGDet or bearCHoCH or bearBOS)
+        dir := "SELL"
+        entry := showFVG and array.size(bearishFVGs) > 0 ? array.get(bearishFVGs, array.size(bearishFVGs) - 1).top : close
+        sl    := math.max(lastSwingHigh + atr * 0.5, close + atr * atrMultSL)
+        tp1   := close - atr * atrMultTP * 0.5
+        tp2   := close - atr * atrMultTP
+        tp3   := close - atr * atrMultTP * 1.5
+        oType := modeDetected == "SCALP" ? "MARKET" : "LIMIT"
+        reasoning := "Bearish bias confirmed | FVG/CHoCH present | Volume spike | HTF: " + htfBiasLabel
+        conf := math.min(10, 6 + (isVolSpike ? 2 : 0) + (bearCHoCH ? 1 : 0) + (array.size(bearishFVGs) > 0 ? 1 : 0))
+        conf := math.max(1, conf)
+
+    // Calculate RR
+    float risk = math.abs(entry - sl)
+    float reward1 = math.abs(tp1 - entry)
+    float rr = risk > 0 ? reward1 / risk : 0
+
+    // Lot size from risk %
+    float accountEquity = strategy.equity
+    float riskAmt = accountEquity * (riskPct / 100)
+    float lot = risk > 0 ? math.min(riskAmt / (risk * 100000), maxLots) : 0
+
+    ts := TradeSetup.new(dir, entry, sl, tp1, tp2, tp3, rr, lot, oType, reasoning, conf)
+    ts
+
+currentSetup = generateSetup()
+
+// ============================================
+//  12. PERUBAHAN: EXECUTION LOGIC
+// ============================================
+type Execution
+    string confirmRule1
+    string confirmRule2
+    string confirmRule3
+    string invalidation
+    string session
+    string tradeWindow
+
+execLogic() =>
+    Execution e = Execution.new()
+    e.confirmRule1 := "FVG zone retest + candle confirmation (engulfing/hammer)"
+    e.confirmRule2 := "Volume spike > " + str.tostring(volMult) + "x MA on retest"
+    e.confirmRule3 := "BOS break confirmation on HTF (" + htf2Timeframe + ")"
+    e.invalidation := "Close beyond " + (currentSetup.direction == "BUY" ? "SL level" : "SL level") + " | Structure break (CHoCH opposite)"
+    e.session      := "Major: London/NY Open | Minor: Asia flat"
+    e.tradeWindow  := "Allow trades " + (modeDetected == "SCALP" ? "intraday only" : "1-5 days swing")
+    e
+
+currentExec = execLogic()
+
+// ============================================
+//  13. PERUBAHAN: MICRO-TIMEFRAME PLAN (1M–5M)
+// ============================================
+type MicroPlan
+    string tf1_trigger
+    string tf1_entry
+    string tf1_sl
+    string tf1_tp
+    string tf5_structure
+    string tf5_ob
+
+microPlan() =>
+    MicroPlan m = MicroPlan.new()
+    string dir = currentSetup.direction
+    float curAtr = atr
+    m.tf1_trigger := dir == "BUY" ? "M1 pullback to EMA 8/21 + FVG retest" :
+                  dir == "SELL" ? "M1 rally to EMA 8/21 + FVG retest" : "No setup"
+    m.tf1_entry   := dir == "BUY" ? "Buy at " + str.tostring(currentSetup.entryPrice, format.mintick) :
+                  dir == "SELL" ? "Sell at " + str.tostring(currentSetup.entryPrice, format.mintick) : "—"
+    m.tf1_sl      := "SL: " + str.tostring(currentSetup.stopLoss, format.mintick)
+    m.tf1_tp      := "TP1: " + str.tostring(currentSetup.takeProfit1, format.mintick) +
+                     " | TP2: " + str.tostring(currentSetup.takeProfit2, format.mintick)
+    m.tf5_structure := "On M5: watch for HH/HL (bull) or LH/LL (bear) + FVG fill"
+    m.tf5_ob      := "Order block at: " + (dir == "BUY" ? str.tostring(bullOBLow, format.mintick) : str.tostring(bearOBHigh, format.mintick))
+    m
+
+currentMicro = microPlan()
+
+// ============================================
+//  14. PERUBAHAN: CONFIDENCE METER
+// ============================================
+drawConfidenceMeter(int conf) =>
+    int bars = math.round(conf / 10 * 20)
+    string meter = ""
+    for i = 0 to 20
+        meter += i < bars ? "█" : "░"
+    meter
+
+// ============================================
+//  15. PERUBAHAN: ALTERNATE SCENARIO
+// ============================================
+type AltScenario
+    string trigger
+    string setup
+    string tp
+    string sl
+
+altScenario() =>
+    AltScenario a = AltScenario.new()
+    string dir = currentSetup.direction
+    a.trigger := "Primary setup fails: price consolidates in range"
+    a.setup   := dir == "BUY" ? "Wait for sell sweep of swing low → then buy CHoCH" :
+              dir == "SELL" ? "Wait for buy sweep of swing high → then sell CHoCH" : "No trade"
+    a.tp      := "TP: 50% of primary TP | RR: 1:1 min"
+    a.sl      := "SL: Beyond sweep wick high/low"
+    a
+
+currentAlt = altScenario()
+
+// ============================================
+//  16. PERUBAHAN: REPORT TABLE (Dashboard)
+// ============================================
+var table dashTable = table.new(position.top_right, 2, 20, bgcolor=color.new(color.black, 80))
+
+if barstate.islast
+    table.cell(dashTable, 0, 0, "📊 SMC + FVG DASHBOARD", text_color=color.white, text_size=size.normal)
+    table.cell(dashTable, 1, 0, str.format("{0,number,#.##}", close), text_color=color.yellow, text_size=size.normal)
+    table.cell(dashTable, 0, 1, "Bias", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 1, biasDetected, text_color=biasDetected == "BULLISH" ? color.lime : biasDetected == "BEARISH" ? color.red : color.gray, text_size=size.small)
+    table.cell(dashTable, 0, 2, "Mode", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 2, modeDetected, text_color=color.aqua, text_size=size.small)
+    table.cell(dashTable, 0, 3, "HTF Bias (" + htf1Timeframe + ")", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 3, htfBiasLabel, text_color=htfBiasLabel == "BULLISH" ? color.lime : htfBiasLabel == "BEARISH" ? color.red : color.gray, text_size=size.small)
+    table.cell(dashTable, 0, 4, "BOS", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 4, bosDir == 1 ? "🟢 BULL" : bosDir == -1 ? "🔴 BEAR" : "⚪ NEUT", text_color=color.white, text_size=size.small)
+    table.cell(dashTable, 0, 5, "FVG (Bull)", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 5, str.tostring(array.size(bullishFVGs)), text_color=color.lime, text_size=size.small)
+    table.cell(dashTable, 0, 6, "FVG (Bear)", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 6, str.tostring(array.size(bearishFVGs)), text_color=color.red, text_size=size.small)
+    table.cell(dashTable, 0, 7, "Volume Spike", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 7, isVolSpike ? "✅ YES" : "❌ NO", text_color=isVolSpike ? color.lime : color.gray, text_size=size.small)
+    table.cell(dashTable, 0, 8, "Trend Score", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 8, str.tostring(trendScore) + "/5", text_color=trendScore >= 3 ? color.lime : trendScore <= -3 ? color.red : color.orange, text_size=size.small)
+    table.cell(dashTable, 0, 9, "Setup Dir", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 9, currentSetup.direction, text_color=currentSetup.direction == "BUY" ? color.lime : currentSetup.direction == "SELL" ? color.red : color.gray, text_size=size.small)
+    table.cell(dashTable, 0, 10, "Entry", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 10, currentSetup.direction != "NONE" ? str.format("{0,number,#.#}", currentSetup.entryPrice) : "—", text_color=color.yellow, text_size=size.small)
+    table.cell(dashTable, 0, 11, "SL", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 11, currentSetup.direction != "NONE" ? str.format("{0,number,#.#}", currentSetup.stopLoss) : "—", text_color=color.red, text_size=size.small)
+    table.cell(dashTable, 0, 12, "TP1", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 12, currentSetup.direction != "NONE" ? str.format("{0,number,#.#}", currentSetup.takeProfit1) : "—", text_color=color.lime, text_size=size.small)
+    table.cell(dashTable, 0, 13, "R:R", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 13, currentSetup.direction != "NONE" ? str.format("{0,number,#.#}", currentSetup.rrRatio) : "—", text_color=color.orange, text_size=size.small)
+    table.cell(dashTable, 0, 14, "Lot Size", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 14, currentSetup.direction != "NONE" ? str.format("{0,number,#.##}", currentSetup.lotSize) : "—", text_color=color.orange, text_size=size.small)
+    table.cell(dashTable, 0, 15, "Confidence", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 15, str.tostring(currentSetup.confidence) + "/10", text_color=currentSetup.confidence >= 7 ? color.lime : currentSetup.confidence >= 4 ? color.orange : color.red, text_size=size.small)
+    table.cell(dashTable, 0, 16, "Order Type", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 16, currentSetup.orderType, text_color=color.aqua, text_size=size.small)
+    table.cell(dashTable, 0, 17, "Session", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 17, currentExec.session, text_color=color.white, text_size=size.small)
+    table.cell(dashTable, 0, 18, "⚠️ Invalidation", text_color=color.gray, text_size=size.small)
+    table.cell(dashTable, 1, 18, "See Report", text_color=color.red, text_size=size.small)
+
+// ============================================
+//  17. PERUBAHAN: PLOTTING — MARKET STRUCTURE
+// ============================================
+plotshape(showStruct and not na(lastSwingHigh) and bar_index == lastSwingHighIdx, title="Swing High", style=shape.triangledown, color=color.red, location=location.abovebar, size=size.tiny)
+plotshape(showStruct and not na(lastSwingLow) and bar_index == lastSwingLowIdx,  title="Swing Low",  style=shape.triangleup,   color=color.green, location=location.belowbar, size=size.tiny)
+
+// Plot EMA Ribbon
+pEMA8   = plot(ema8,   "EMA 8",   color=color.new(#2196F3, 20))
+pEMA21  = plot(ema21,  "EMA 21",  color=color.new(#9C27B0, 20))
+pEMA50  = plot(ema50,  "EMA 50",  color=color.new(#FF9800, 40))
+pEMA200 = plot(ema200, "EMA 200", color=color.new(#607D8B, 60))
+fill(pEMA8, pEMA21, color=trendScore >= 0 ? color.new(color.green, 70) : color.new(color.red, 70), title="EMA Ribbon")
+
+// ============================================
+//  18. PERUBAHAN: PLOTTING — BOS / CHoCH
+// ============================================
+plotshape(showBOS and bullBOS, title="Bull BOS", style=shape.circle, color=color.lime, size=size.small, location=location.abovebar)
+plotshape(showBOS and bearBOS, title="Bear BOS", style=shape.circle, color=color.red,  size=size.small, location=location.belowbar)
+plotshape(showBOS and bullCHoCH, title="Bull CHoCH", style=shape.diamond, color=color.orange, size=size.small, location=location.abovebar)
+plotshape(showBOS and bearCHoCH, title="Bear CHoCH", style=shape.diamond, color=color.orange, size=size.small, location=location.belowbar)
+
+// ============================================
+//  19. PERUBAHAN: PLOTTING — FVG ZONES
+// ============================================
+if showFVG and array.size(bullishFVGs) > 0
+    FVG f = array.get(bullishFVGs, array.size(bullishFVGs) - 1)
+    box.new(left=bar_index - 3, right=bar_index, top=f.top, bottom=f.bottom,
+         bgcolor=color.new(fvgBullCol, 70), border_color=color.new(fvgBullCol, 50), border_width=1)
+    if showLabels
+        label.new(x=bar_index - 1, y=f.top, text="FVG", color=color.new(color.green, 50),
+               text_color=color.white, style=label.style_label_down, size=size.tiny)
+
+if showFVG and array.size(bearishFVGs) > 0
+    FVG f = array.get(bearishFVGs, array.size(bearishFVGs) - 1)
+    box.new(left=bar_index - 3, right=bar_index, top=f.top, bottom=f.bottom,
+         bgcolor=color.new(fvgBearCol, 70), border_color=color.new(fvgBearCol, 50), border_width=1)
+    if showLabels
+        label.new(x=bar_index - 1, y=f.bottom, text="FVG", color=color.new(color.red, 50),
+               text_color=color.white, style=label.style_label_up, size=size.tiny)
+
+// ============================================
+//  20. PERUBAHAN: PLOTTING — ORDER BLOCKS
+// ============================================
+if showOB and not na(bullOBLow)
+    box.new(left=bar_index - 5, right=bar_index - 2, top=bullOBHigh, bottom=bullOBLow,
+         bgcolor=color.new(obBullCol, 75), border_color=color.new(obBullCol, 50), border_width=1)
+    if showLabels
+        label.new(x=bar_index - 3, y=bullOBLow, text="Bull OB", color=color.new(#00BFFF, 50),
+               text_color=color.white, style=label.style_label_up, size=size.tiny)
+
+if showOB and not na(bearOBHigh)
+    box.new(left=bar_index - 5, right=bar_index - 2, top=bearOBHigh, bottom=bearOBLow,
+         bgcolor=color.new(obBearCol, 75), border_color=color.new(obBearCol, 50), border_width=1)
+    if showLabels
+        label.new(x=bar_index - 3, y=bearOBHigh, text="Bear OB", color=color.new(#FF8C00, 50),
+               text_color=color.white, style=label.style_label_down, size=size.tiny)
+
+// ============================================
+//  21. PERUBAHAN: PLOTTING — LIQUIDITY SWEEPS
+// ============================================
+plotshape(liquiditySweepHigh and showBOS, title="LiQ Sweep High", style=shape.triangledown,
+     color=color.new(color.red, 0), size=size.small, location=location.abovebar)
+plotshape(liquiditySweepLow and showBOS, title="LiQ Sweep Low", style=shape.triangledown,
+     color=color.new(color.green, 0), size=size.small, location=location.belowbar)
+
+// ============================================
+//  22. PERUBAHAN: PLOTTING — TRADE SETUP LEVELS
+// ============================================
+plot(showLabels and currentSetup.direction == "BUY"  ? currentSetup.entryPrice  : na, "Entry BUY",  color=color.green, style=plot.style_linebr, linewidth=2)
+plot(showLabels and currentSetup.direction == "BUY"  ? currentSetup.stopLoss   : na, "SL BUY",     color=color.red,   style=plot.style_linebr, linewidth=1, style=plot.style_line)
+plot(showLabels and currentSetup.direction == "BUY"  ? currentSetup.takeProfit1 : na, "TP1 BUY",   color=color.lime,  style=plot.style_linebr, linewidth=1)
+plot(showLabels and currentSetup.direction == "SELL" ? currentSetup.entryPrice  : na, "Entry SELL", color=color.red,   style=plot.style_linebr, linewidth=2)
+plot(showLabels and currentSetup.direction == "SELL" ? currentSetup.stopLoss   : na, "SL SELL",    color=color.lime,  style=plot.style_linebr, linewidth=1)
+plot(showLabels and currentSetup.direction == "SELL" ? currentSetup.takeProfit1 : na, "TP1 SELL",   color=color.orange, style=plot.style_linebr, linewidth=1)
+
+// ============================================
+//  23. PERUBAHAN: ALERTS
+// ============================================
+alertcondition(bullFVGDet and isVolSpike, title="🔵 Bullish FVG + Vol Spike", message="Bullish FVG detected with volume spike on {{ticker}}")
+alertcondition(bearFVGDet and isVolSpike, title="🔴 Bearish FVG + Vol Spike", message="Bearish FVG detected with volume spike on {{ticker}}")
+alertcondition(bullBOS,  title="🟢 Bull BOS", message="Bullish Break of Structure on {{ticker}}")
+alertcondition(bearBOS,  title="🔴 Bear BOS", message="Bearish Break of Structure on {{ticker}}")
+alertcondition(bullCHoCH, title="🟡 Bull CHoCH", message="Bullish Change of Character on {{ticker}}")
+alertcondition(bearCHoCH, title="🟡 Bear CHoCH", message="Bearish Change of Character on {{ticker}}")
+alertcondition(liquiditySweepHigh, title="⚡ Liq Sweep High", message="Liquidity sweep of highs on {{ticker}}")
+alertcondition(liquiditySweepLow,  title="⚡ Liq Sweep Low",  message="Liquidity sweep of lows on {{ticker}}")
+
+// ============================================
+//  24. PERUBAHAN: BACKTEST STRATEGY (OPSIONAL)
+//     Uncomment untuk backtest
+// ============================================
+/*
+strategy("SMC+FVG Hybrid Strategy", overlay=true, default_qty_type=strategy.fixed, default_qty_value=0.1,
+     commission_type=strategy.commission.percent, commission_value=0.0004)
+
+if biasDetected == "BULLISH" and bullFVGDet and isVolSpike
+    strategy.entry("Buy", strategy.long, comment="Buy | " + htfBiasLabel)
+    strategy.exit("Exit Buy", "Buy", stop=currentSetup.stopLoss, limit=currentSetup.takeProfit1, comment="Exit")
+
+if biasDetected == "BEARISH" and bearFVGDet and isVolSpike
+    strategy.entry("Sell", strategy.short, comment="Sell | " + htfBiasLabel)
+    strategy.exit("Exit Sell", "Sell", stop=currentSetup.stopLoss, limit=currentSetup.takeProfit1, comment="Exit")
+*/
+
+// ============================================
+//  25. PERUBAHAN: INFO PANEL (Background)
+// ============================================
+bgcolor(
+   modeDetected == "HYBRID" ? color.new(#1565C0, 88) :
+   modeDetected == "SWING"  ? color.new(#2E7D32, 88) :
+   modeDetected == "SCALP"  ? color.new(#F57F17, 88) :
+   color.new(color.gray, 92),
+   title="Mode Background"
+)
+
+// ============================================
+//  DOKUMENTASI KODE (untuk developer review)
+// ============================================
+/*
+╔══════════════════════════════════════════════════════════════╗
+║            SMC + FVG HYBRID ANALYZER — DOKUMENTASI          ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  BLOK 1 — SETTINGS                                           ║
+║  • Grup: SMC, FVG, Multi-TF, Trade Management, Visual         ║
+║  • Semua parameter user-configurable via input UI           ║
+║                                                              ║
+║  BLOK 2 — MATH & UTILS                                       ║
+║  • ATR (Average True Range) — SL/TP base                     ║
+║  • Volume Spike — filter noise                               ║
+║  • EMA Ribbon (8, 21, 50, 200) — trend scoring               ║
+║                                                              ║
+║  BLOK 3 — MARKET STRUCTURE (SMC Core)                         ║
+║  • Swing High/Low detection via ta.pivothigh/low             ║
+║  • BOS (Break of Structure) — arah trend utama               ║
+║  • CHoCH (Change of Character) — reversal signal             ║
+║                                                              ║
+║  BLOK 4 — FAIR VALUE GAP (FVG)                                ║
+║  • Bullish FVG: low > high[2] + ATR threshold                 ║
+║  • Bearish FVG: high < low[2] - ATR threshold                 ║
+║  • Array storage — last 10 FVGs, newest at end               ║
+║  • Reliability = gap size / ATR                               ║
+║                                                              ║
+║  BLOK 5 — ORDER BLOCKS                                        ║
+║  • Deteksi: strong candle + volume + pullback pattern         ║
+║  • Bull OB: strong bullish + pullback low                     ║
+║  • Bear OB: strong bearish + pullback high                    ║
+║                                                              ║
+║  BLOK 6 — LIQUIDITY SWEEPS                                    ║
+║  • Sweep High: high > swing high + ATR*0.3 → close < high    ║
+║  • Sweep Low: low < swing low - ATR*0.3 → close > low        ║
+║  • Mengindikasikan institutional stop hunt                    ║
+║                                                              ║
+║  BLOK 7 — HTF ANALYSIS (request.security)                     ║
+║  • HTF-1 (D): bias utama (EMA50/EMA200 alignment)           ║
+║  • HTF-2 (4H): struktur intermediate                          ║
+║  • Bias = BULLISH/BEARISH/NEUTRAL                             ║
+║                                                              ║
+║  BLOK 8 — MODE DETECTION                                      ║
+║  • HYBRID: HTF alignment kuat + vol < 0.3%                    ║
+║  • SCALP: vol >= 0.3%, fast entry/exit                       ║
+║  • SWING: vol rendah, wider SL, hold lebih lama              ║
+║                                                              ║
+║  BLOK 9 — BIAS & REASONING                                   ║
+║  • Scoring: EMA + HTF + Structure + Volume                   ║
+║  • Score >= 3 → BULLISH, <= -3 → BEARISH                     ║
+║  • Output: bias string + score integer                       ║
+║                                                              ║
+║  BLOK 10 — ZONE SCORING                                       ║
+║  • Zone Score = institutional confidence (0-100)             ║
+║  • Dipengaruhi oleh zone size relative to ATR               ║
+║                                                              ║
+║  BLOK 11 — TRADE SETUP GENERATOR                              ║
+║  • Input: bias, FVG/CHoCH/BOS presence, volume              ║
+║  • Output: direction, entry, SL, TP1/2/3, RR, lot, type     ║
+║  • Entry: FVG bottom (bull) / top (bear)                     ║
+║  • SL: swing low/high ± ATR*SL_mult                          ║
+║  • TP: ATR multiples dari entry                              ║
+║  • Lot: risk% dari equity / (SL distance * 100000)          ║
+║  • Confidence: base 6 + vol spike + CHoCH + FVG count       ║
+║                                                              ║
+║  BLOK 12 — EXECUTION LOGIC                                    ║
+║  • 3 confirm rules: FVG retest + vol + BOS break             ║
+║  • Invalidation: close beyond SL | opposite CHoCH           ║
+║  • Session: London/NY open = primary window                  ║
+║                                                              ║
+║  BLOK 13 — MICRO-TIMEFRAME PLAN                               ║
+║  • M1 trigger: EMA 8/21 retest + FVG fill                   ║
+║  • M5 structure: HH/HL confirmation                           ║
+║  • M5 OB: zona order block untuk entry                        ║
+║                                                              ║
+║  BLOK 14 — CONFIDENCE METER                                   ║
+║  • 10-point scale, visual bar (█/░)                          ║
+║                                                              ║
+║  BLOK 15 — ALTERNATE SCENARIO                                 ║
+║  • Trigger: primary fails → range consolidation            ║
+║  • Setup: tunggu sweep → CHoCH counter-trend                 ║
+║  • TP: 50% primary TP, minimum 1:1 RR                         ║
+║                                                              ║
+║  BLOK 16 — DASHBOARD TABLE                                    ║
+║  • 19-row table: bias, mode, HTF, BOS, FVG count,          ║
+║    volume, trend score, setup, entry, SL, TP, RR, lot,      ║
+║    confidence, order type, session, invalidation            ║
+║                                                              ║
+║  BLOK 17-22 — PLOTTING                                        ║
+║  • EMA ribbon dengan fill color sesuai trend                 ║
+║  • Swing high/low markers                                     ║
+║  • BOS/CHoCH circles/diamonds                                 ║
+║  • FVG boxes dengan label                                     ║
+║  • Order block boxes dengan label                             ║
+║  • Liquidity sweep triangles                                  ║
+║  • Entry/SL/TP linebr plots                                   ║
+║                                                              ║
+║  BLOK 23 — ALERTS                                             ║
+║  • 8 alertcondition: FVG bull/bear, BOS bull/bear,          ║
+║    CHoCH bull/bear, Liq Sweep High/Low                      ║
+║                                                              ║
+║  BLOK 24 — BACKTEST (commented)                               ║
+║  • Strategi Pine Script untuk backtest                      ║
+║  • Risk management via SL/TP                                  ║
+║                                                              ║
+║  BLOK 25 — MODE BACKGROUND                                   ║
+║  • Background color sesuai mode (HYBRID/SWING/SCALP)         ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+*/
