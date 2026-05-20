@@ -1,8 +1,15 @@
-# JavaneseTrader EA - MT4/MT5 Expert Advisor
+# Omon-Omon Trading Repository
 
-**Filosofi trading:** *"Tuku ketika rego ra gelem mudun. Dol ketika rego ra gelem munggah."*
+**Cuancux Algo Traders | Omon-Omon Repo**
 
-> Beli ketika harga sudah tidak mau turun lagi. Jual ketika harga sudah tidak mau naik lagi.
+```
+╔════════════════════════════════════════════════════════════════╗
+║              Omon-Omon Automated Trading System                ║
+║           MetaTrader 4/5 Expert Advisors & Indicators         ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+*"Trading Bukan Judi, Ini Skill!"* 💪
 
 ---
 
@@ -10,136 +17,186 @@
 
 ```
 omon-omon/
-  MT4/                 # MetaTrader 4 (MQ4)
-    Experts/           # Expert Advisors
-    Indicators/        # Custom Indicators
-    Scripts/           # Standalone Scripts
-    Include/           # Shared Header Files
-  MT5/                 # MetaTrader 5 (MQ5)
-    Experts/           # Expert Advisors
-    Indicators/        # Custom Indicators
-    Scripts/           # Standalone Scripts
-    Include/           # Shared Header Files
-  Mentahan/            # File mentah / raw resources
-  Skills/              # Dokumentasi skill & workflow
+├── MT5/                    # MetaTrader 5 — MQL5 source
+│   ├── Experts/            # Expert Advisors (19 EAs)
+│   ├── Indicators/          # Custom Indicators (8 files)
+│   ├── Scripts/            # Utility scripts
+│   ├── Include/            # Shared headers
+│   └── Dokumentasi/        # Prompt templates & Pine scripts
+├── MT4/                    # MetaTrader 4 — MQL4 source
+│   ├── Experts/            # Expert Advisors (6 EAs)
+│   ├── Indicators/          # Custom Indicators
+│   ├── Include/            # Shared headers (7 files)
+│   └── Scripts/
+├── Mentahan/               # File mentah / raw resources
+├── Skills/                 # Dokumentasi skill & workflow
+├── README.md               # (ini file)
+└── SPEC.md                 # Technical specification & parameter reference
 ```
 
 ---
 
-## Fitur Utama
+## Experts (EA) — MT5
 
-### Strategi Entry
-- **TUKU (Buy):** Price refuses to go down
-  - Swing low detection
-  - Higher low confirmation
-  - RSI oversold filter (opsional)
+| EA | Strategi | Status |
+|----|----------|--------|
+| `JavaneseTrader_EA.mq5` | Price refuses to go down/up (Tuku/Dol) | utama |
+| `EA_SMC_FVG_Hybrid.mq5` | Smart Money Concept + FVG hybrid auto-trading | utama |
+| `EA_JoeRoss_Hooks.mq5` | Joe Ross 1-2-3 + Ross Hooks | utama |
+| `3Musketeer.mq5` | Triple timeframe strategy | |
+| `3MusketeerPro.mq5` | Enhanced 3 Musketeer | |
+| `AK_RPG.mq5` | RPG-based trading EA | |
+| `BreakoutChannel_EA.mq5` | Breakout channel strategy | |
+| `BreakoutPullback.mq5` | Breakout + pullback entry | |
+| `CoinFlipEA.mq5` | 50/50 coinflip EA | |
+| `EA_ChartPattern12.mq5` | Chart pattern recognition v12 | |
+| `KampretCoinflip.mq5` | Modified coinflip variant | |
+| `MA_Cross_Averaging.mq5` | MA crossover averaging | |
+| `MTF_Integration_MQL5.mq5` | Multi-timeframe integration | |
+| `SevenCandleNaga.mq5` | 7 candle pattern EA | |
+| `SevenNagaSignal_MQ5.mq5` | Seven Naga signal EA | |
+| `SignalScalerATR.mq5` | ATR-based signal scaler | |
+| `XAUUSD_Scalper_M1_VirtualTrail.mq5` | M1 scalper with virtual trail | |
+| `XAUUSD_SwingEMARSI.mq5` | Swing trade with EMA + RSI | |
 
-- **DOL (Sell):** Price refuses to go up
-  - Swing high detection
-  - Lower high confirmation
-  - RSI overbought filter (opsional)
+## Experts (EA) — MT4
 
-### Risk Management
-- Fixed lot atau dynamic lot (% risk)
-- Stop Loss (static points atau ATR-based)
-- Take Profit (static points atau RR ratio)
-- Breakeven lock setelah X points profit
+| EA | Strategi |
+|----|----------|
+| `BreakoutChannel_EA.mq4` | Breakout channel strategy |
+| `BreakoutPullback.mq4` | Breakout + pullback entry |
+| `EA_ChartPattern12.mq4` | Chart pattern recognition v12 |
+| `MTF_Integration_MQL4.ex4` | Multi-timeframe integration (compiled) |
+| `SevenCandleNaga.mq4` | 7 candle pattern EA |
+| `JavaneseTrader_EA.mq5` | Price refuses to go down/up (Tuku/Dol) |
 
-### Trailing Stop
-- **STEP:** SL bergerak per step setelah trigger
-- **LINEAR:** SL mengikuti harga dengan distance tetap
+---
 
-### Filter & Control
-- RSI filter
-- Session filter (jam trading)
-- Max concurrent orders per symbol
+## Indicators — MT5
+
+| Indicator | Deskripsi |
+|-----------|-----------|
+| `guppy_mma.mq5` | **Guppy MMA** — 12 EMAs (short/long groups) by mladen |
+| `DarvasBox_Indicator.mq5` | Darvas box breakout system |
+| `iCPattern12.mq5` | Chart pattern indicator v12 |
+| `VPA_BDTL_Volume_V10.mq5` | VPA Volume + BDTL analysis |
+| `VPA_BDTL_Volume_V10_Enhanced.mq5` | Enhanced VPA version |
+| `VPA_Coulling_Textbook.mq5` | VPA based on Anna Coulling |
+
+## Indicators — MT4
+
+| Indicator | Deskripsi |
+|-----------|-----------|
+| `iCPattern12.mq4` | Chart pattern indicator v12 |
+
+---
+
+## Scripts — MT5
+
+| Script | Deskripsi |
+|--------|-----------|
+| `CloseAllPositions.mq5` | Mass close all positions |
+
+---
+
+## Dokumentasi / TradingView
+
+| File | Deskripsi |
+|------|-----------|
+| `smc_fvg_hybrid_analyzer.pine` | Full SMC+FVG analyzer (Pine Script v6) |
+| `01_analysis_report.md` | AI analysis prompt template |
+
+---
+
+## Include Headers
+
+### MT5
+| File | Deskripsi |
+|------|-----------|
+| `JavaneseTrader_Config.mqh` | Shared config (signals, lot calc, price norm) |
+
+### MT4
+| File | Deskripsi |
+|------|-----------|
+| `CPattern12.mqh` | Chart Pattern v12 core |
+| `CPattern12.mq4` | Chart Pattern v12 implementation |
+| `MTF_Filter.mqh` | Multi-timeframe filter |
+| `MTF_Filter_MS.mqh` | MTF filter (multi-symbol) |
+| `PriceChannel.mqh` | Price channel utilities |
+| `SMC_Filter.mqh` | SMC filter helpers |
+| `JavaneseTrader_Config.mqh` | Shared config |
+
+---
+
+## EA Unggulan
+
+### JavaneseTrader EA
+**Filosofi:** *"Tuku ketika rego ra gelem mudun. Dol ketika rego ra gelem munggah."*
+
+Buy ketika harga tidak mau turun lagi. Sell ketika harga tidak mau naik lagi.
+
+Fitur: Swing detection, RSI filter, Trailing Stop, Breakeven, Session filter, Dynamic lot sizing.
+
+Detail parameter: lihat `SPEC.md`
+
+### EA_SMC_FVG_Hybrid (MT5)
+Auto-detect mode (Swing/Scalp/Hybrid), FVG detection, BOS+CHoCH, HTF bias (D1+H4), Volume spike filter.
+
+Parameter utama: `InpSwingPeriod=5`, `InpAtrMultSL=1.5`, `InpAtrMultTP=2.5`, `InpRiskPercent=1.0%`
+
+### EA_JoeRoss_Hooks (MT5)
+Joe Ross 1-2-3 Pattern + Ross Hooks Entry, EMA trend filter (8/21/50), Fibonacci Extensions TP.
+
+Parameter utama: `InpSwingPeriod=5`, `InpFibExt1/2/3=127%/161%/200%`
 
 ---
 
 ## Instalasi
 
 ### MT5
-1. Copy file `.mq5` dari folder `MT5/` ke:
-   ```
-   %APPDATA%\MetaQuotes\Terminal\<ID>\MQL5\
-   ```
-2. Restart MT5 terminal
-3. Navigator > Expert Advisors > Drag ke chart
+```
+Copy MT5/Experts/*.mq5 ke:
+%APPDATA%\MetaQuotes\Terminal\<ID>\MQL5\Experts\
+
+Copy MT5/Indicators/*.mq5 ke:
+%APPDATA%\MetaQuotes\Terminal\<ID>\MQL5\Indicators\
+
+Copy MT5/Include/*.mqh ke:
+%APPDATA%\MetaQuotes\Terminal\<ID>\MQL5\Include\
+
+Restart MT5 → Compile → Drag ke chart
+```
 
 ### MT4
-1. Copy file `.mq4` dari folder `MT4/` ke:
-   ```
-   %APPDATA%\MetaQuotes\Terminal\<ID>\MQL4\
-   ```
-2. Restart MT4 terminal
-3. Navigator > Expert Advisors > Drag ke chart
+```
+Copy MT4/Experts/*.mq4 ke:
+%APPDATA%\MetaQuotes\Terminal\<ID>\MQL4\Experts\
 
----
+Copy MT4/Indicators/*.mq4 ke:
+%APPDATA%\MetaQuotes\Terminal\<ID>\MQL4\Indicators\
 
-## Parameter Inputs
+Restart MT4 → Drag ke chart
+```
 
-### Entry Settings
-| Parameter | Default | Deskripsi |
-|-----------|---------|-----------|
-| LookbackPeriod | 20 | Jumlah candle untuk swing detection |
-| MinSwingSize | 0.5% | Minimum swing size |
-| WaitCandles | 3 | Konfirmasi candle sebelum entry |
-| UseRSIFilter | true | Aktifkan RSI filter |
-| RSIPeriod | 14 | RSI period |
-| RSIBuyLevel | 30 | RSI oversold threshold |
-| RSISellLevel | 70 | RSI overbought threshold |
-
-### Risk Management
-| Parameter | Default | Deskripsi |
-|-----------|---------|-----------|
-| RiskPercent | 2.0% | Risk per trade |
-| FixedLot | 0.0 | Fixed lot (0 = use RiskPercent) |
-| StopLossPoints | 500 | SL dalam points (0 = ATR dynamic) |
-| TakeProfitPoints | 1000 | TP dalam points (0 = RR ratio) |
-| TakeProfitRatio | 2.0 | TP:SL ratio |
-| UseBreakeven | true | Aktifkan breakeven |
-| BreakevenOffset | 100 | Points profit sebelum BE trigger |
-
-### Trailing
-| Parameter | Default | Deskripsi |
-|-----------|---------|-----------|
-| UseTrailing | true | Aktifkan trailing stop |
-| TrailingStart | 100 | Points profit untuk mulai trailing |
-| TrailingStep | 50 | Step size per movement |
-| TrailingDistance | 50 | Jarak dari harga |
-| TrailingMode | STEP | STEP atau LINEAR |
+### TradingView
+Copy paste file `.pine` ke Pine Editor → Add to Chart
 
 ---
 
 ## Catatan Penting
 
 - **Backtest dulu** sebelum live trading
-- Disarankan TF H1 atau lebih
-- Kombinasi dengan trend filter (MA cross) meningkatkan akurasi
+- Direkomendasikan TF M30+ untuk hasil lebih stabil
+- Kombinasi dengan trend filter (EMA cross, ADX) meningkatkan akurasi
 - Jangan lupa set `MaxOrders` sesuai strategi
+- Perhatikan `MagicNumber` jika pakai multiple EA
 
 ---
 
-## Backtest Template
+## ⚠️ Disclaimer
 
-Gunakan Strategy Tester:
-- **Period:** M30 - H1
-- **Model:** Every tick (or nearest)
-- **Date:** Minimal 3 bulan data
-- **Deposit:** Sesuaikan dengan risk management
+*This is educational/automated trading content. Not financial advice. Always use proper risk management. Past performance does not guarantee future results.*
 
 ---
 
-## Version History
-
-### v1.00
-- Swing detection (Tuku/Dol logic)
-- RSI filter
-- Trailing stop (Step & Linear)
-- Breakeven trigger
-- Session filter
-- Dynamic lot sizing
-
----
-
-*"Sabar lan disiplin ngenteni momentum sing bener."*
+**Built by Omon-Omon Algo Traders for Cuancux Algo Traders**
