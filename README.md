@@ -9,7 +9,18 @@
 ╚════════════════════════════════════════════════════════════════╝
 ```
 
-*"Trading Bukan Judi, Ini Skill!"* 💪
+---
+
+## Built Your Own Trading System
+
+Join our community and chat with our AI agent:
+https://t.me/cuancux_help_bot
+
+More projects:
+- https://linktr.ee/lybeedo
+- https://www.timesynctrading.com/
+
+---
 
 ---
 
