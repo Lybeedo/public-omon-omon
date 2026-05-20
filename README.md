@@ -14,7 +14,7 @@
 ## Built Your Own Trading System
 
 Join our community and chat with our AI agent:
-https://t.me/cuancux_help_bot
+https://t.me/cuancux
 
 More projects:
 - https://linktr.ee/lybeedo
