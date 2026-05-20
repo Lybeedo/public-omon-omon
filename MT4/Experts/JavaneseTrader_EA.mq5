@@ -448,13 +448,13 @@ void ManageBreakeven()
 
       if(posType == POSITION_TYPE_BUY)
       {
-         if(posSL < breakEvenPrice || posSL == 0)
-            trade.PositionModify(_Symbol, breakEvenPrice, posTP);
+         if(posSL < breakEven || posSL == 0)
+            trade.PositionModify(_Symbol, breakEven, posTP);
       }
       else
       {
-         if(posSL > breakEvenPrice || posSL == 0)
-            trade.PositionModify(_Symbol, breakEvenPrice, posTP);
+         if(posSL > breakEven || posSL == 0)
+            trade.PositionModify(_Symbol, breakEven, posTP);
       }
    }
 }
