@@ -253,12 +253,57 @@ Technical specification untuk seluruh Expert Advisors dan Indicators dalam repo 
 
 ---
 
+### 2.6 GBPUSD_BreakoutBox_EA
+**File:** `MT5/Experts/GBPUSD_BreakoutBox_EA.mq5`, `MT4/Experts/GBPUSD_BreakoutBox_EA.mq4`
+**Strategi:** Deni Dollar (Bandung) — Break 4-Candle HL Box
+
+#### Konsep
+- Identifikasi 4 candle pertama setelah jam mulai (InpStartHour)
+- High & Low 4 candle tersebut = box boundary
+- Break ke atas box → BUY | Break ke bawah box → SELL
+- TP fix: 30 pips
+- **No SL** — gunakan metode **Switch**: jika price balik arah break box, close posisi, masuk lagi arah sebaliknya dengan lot 2x
+- Visual box ditampilkan di chart
+
+#### Input Parameters
+| Group | Parameter | Default | Deskripsi |
+|-------|-----------|---------|-----------|
+| SESSION | InpTradingDay | 1 (Mon) | Hari trading aktif (0=all) |
+| SESSION | InpStartHour | 7 | Jam mulai build box |
+| SESSION | InpCandleCount | 4 | Jumlah candle untuk HL box |
+| TRADE | InpBaseLot | 0.1 | Lot dasar |
+| TRADE | InpTPPips | 30.0 | TP dalam pips |
+| TRADE | InpMaxSpread | 30 | Max spread (pips) |
+| TRADE | InpMaxSwitch | 3 | Max switch count (0=unlimited) |
+| TRADE | InpMagicNumber | 77777 | Magic number |
+| RISK | InpMaxEquityRisk | 50% | Equity protection (% drawdown) |
+| RISK | InpRiskPerLot | $50 | USD risk per 0.1 lot |
+| RISK | InpEnableSwitch | true | Aktifkan switch method |
+| FILTER | InpAllowSameDir | false | Allow same direction after TP |
+
+#### State Machine
+```
+BSTATE_IDLE → BSTATE_BUILD_BOX → BSTATE_READY
+    → BSTATE_PENDING_BREAK → BSTATE_ACTIVE_LONG/SHORT
+    → (switch) → BSTATE_READY (loop)
+    → BSTATE_COMPLETE → BSTATE_IDLE
+```
+
+#### Switch Logic
+- BUY tapi Bid < BoxLow → Close BUY, execute SELL dengan lot 2x
+- SELL tapi Ask > BoxHigh → Close SELL, execute BUY dengan lot 2x
+- Max switch dibatasi InpMaxSwitch untuk prevent lot explosion
+- Equity protection close semua jika drawdown > InpMaxEquityRisk
+
+---
+
 ## 9. Version History
 
 | Versi | Tanggal | Perubahan |
 |-------|---------|-----------|
 | v1.00 | 2025-05-20 | Initial commit — JavaneseTrader + SMC_Lee EAs |
 | v1.01 | 2025-05-20 | Folder restructure: MQ5→MT5, MQL4→MT4, guppy_mma merged |
+| v1.02 | 2025-05-23 | GBPUSD_BreakoutBox_EA — Deni Dollar 4-candle HL Box + Switch method |
 
 ---
 
