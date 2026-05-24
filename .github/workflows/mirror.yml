@@ -34,33 +34,17 @@ jobs:
           TS=$(date +%y%m%d-%H%M)
           SOURCE="."
           echo "=== TIMESTAMP PREFIX: $TS ==="
-          echo "=== Copying added/modified files ==="
-          git diff-tree --no-commit-id -r --name-only HEAD | sort | while IFS= read -r filepath; do
+          echo "=== Mirroring all files in repository ==="
+          find . -type f ! -path './.git/*' ! -name '.git' | sed 's|^\./||' | sort | while IFS= read -r filepath; do
             [ -z "$filepath" ] && continue
-            src="$SOURCE/$filepath"
-            [ ! -f "$src" ] && continue
             new_filename="${TS}_$(basename "$filepath")"
             dest_dir="collection/$(dirname "$filepath")"
             mkdir -p "$dest_dir"
-            cp "$src" "$dest_dir/$new_filename"
+            cp "$filepath" "$dest_dir/$new_filename"
             echo "  COPIED: $filepath -> $dest_dir/$new_filename"
           done
           echo ""
-          echo "=== Copying new/untracked files ==="
-          git ls-files --others --exclude-standard | sort | while IFS= read -r filepath; do
-            [ -z "$filepath" ] && continue
-            src="$SOURCE/$filepath"
-            [ ! -f "$src" ] && continue
-            new_filename="${TS}_$(basename "$filepath")"
-            dest_dir="collection/$(dirname "$filepath")"
-            mkdir -p "$dest_dir"
-            cp "$src" "$dest_dir/$new_filename"
-            echo "  COPIED: $filepath -> $dest_dir/$new_filename"
-          done
-          echo ""
-          echo "=== Deletions: SKIPPED (preserved in collection) ==="
-          DELETED=$(git diff --name-status --diff-filter=D HEAD | grep -v '^$' | cut -f2)
-          [ -n "$DELETED" ] && echo "$DELETED" || echo "  (none)"
+          echo "=== Deleted files: SKIPPED (preserved in collection) ==="
 
       - name: Commit and push to public-collection
         env:
