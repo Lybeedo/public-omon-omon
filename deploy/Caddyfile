@@ -1,0 +1,80 @@
+# Caddyfile - VicChelenge System Reverse Proxy
+# =============================================
+# Auto HTTPS + Load balancing for all services
+# =============================================
+
+{
+    email admin@cuancux.com
+    on_demand_tls {
+        ask https://cuancux.com/tls-verify
+    }
+}
+
+# Main domain
+nexus.cuancux.com {
+    reverse_proxy nexus-api:8000
+    log /var/log/caddy/nexus-api.log
+}
+
+# API endpoints
+api.cuancux.com {
+    reverse_proxy nexus-api:8000
+    log /var/log/caddy/api.log
+}
+
+# Regime engine
+regime.cuancux.com {
+    reverse_proxy nexus-regime:8001
+    log /var/log/caddy/regime.log
+}
+
+# LLM engine
+ai.cuancux.com {
+    reverse_proxy nexus-llm:8002
+    log /var/log/caddy/ai.log
+}
+
+# Optimizer
+opt.cuancux.com {
+    reverse_proxy nexus-optimizer:8003
+    log /var/log/caddy/opt.log
+}
+
+# Dashboard
+dash.cuancux.com {
+    reverse_proxy nexus-dashboard:80
+    log /var/log/caddy/dash.log
+}
+
+# =============================================
+# LOCAL DEVELOPMENT (no domain)
+# =============================================
+
+localhost {
+    handle /api/* {
+        reverse_proxy nexus-api:8000
+    }
+    handle /regime/* {
+        reverse_proxy nexus-regime:8001
+    }
+    handle /llm/* {
+        reverse_proxy nexus-llm:8002
+    }
+    handle /opt/* {
+        reverse_proxy nexus-optimizer:8003
+    }
+    handle /* {
+        reverse_proxy nexus-dashboard:80
+    }
+}
+
+# =============================================
+# TRAEFIK ALTERNATIVE (if not using Caddy)
+# Use docker labels instead of this file
+# =============================================
+
+# labels:
+#   - "traefik.enable=true"
+#   - "traefik.http.routers.nexus-api.rule=Host(`api.cuancux.com`)"
+#   - "traefik.http.routers.nexus-api.tls=true"
+#   - "traefik.http.services.nexus-api.loadbalancer.server.port=8000"

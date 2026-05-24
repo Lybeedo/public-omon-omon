@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VicChelenge System - Nexus Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/feather-icons"></script>
+    <style>
+        body { background: #0a0e17; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+        .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+        .pulse-green { animation: pulseGreen 2s infinite; }
+        @keyframes pulseGreen { 0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); } 50% { box-shadow: 0 0 0 8px rgba(34,197,94,0); } }
+        .pulse-red { animation: pulseRed 2s infinite; }
+        @keyframes pulseRed { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); } 50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); } }
+        .gradient-text { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .regime-badge { font-size: 10px; padding: 2px 8px; border-radius: 12px; }
+        .win { color: #22c55e; }
+        .loss { color: #ef4444; }
+        .breakeven { color: #eab308; }
+        .equity-line { fill: none; stroke: #6366f1; stroke-width: 2; }
+        .drawdown-area { fill: rgba(239,68,68,0.2); }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        .metric-up { color: #22c55e; }
+        .metric-down { color: #ef4444; }
+    </style>
+</head>
+<body class="min-h-screen">
+
+<!-- NAVBAR -->
+<nav class="glass border-b border-slate-700/50 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+            <i data-feather="zap" class="w-4 h-4 text-white"></i>
+        </div>
+        <span class="text-xl font-bold gradient-text">VicChelenge System</span>
+        <span class="text-xs text-slate-500 ml-2">NO MARTINGALE • NO GRID • PURE AI</span>
+    </div>
+    <div class="flex items-center gap-4">
+        <div id="connectionStatus" class="flex items-center gap-2 text-sm">
+            <div class="w-2 h-2 rounded-full bg-slate-500"></div>
+            <span class="text-slate-400">Disconnected</span>
+        </div>
+        <div class="text-right">
+            <div class="text-xs text-slate-500">Server Time</div>
+            <div id="serverTime" class="text-sm font-mono">--:--:--</div>
+        </div>
+    </div>
+</nav>
+
+<!-- MAIN GRID -->
+<div class="grid grid-cols-12 gap-4 p-6">
+
+    <!-- LEFT COLUMN: Status Cards -->
+    <div class="col-span-12 lg:col-span-3 space-y-4">
+
+        <!-- Account -->
+        <div class="glass rounded-xl p-5">
+            <div class="text-xs text-slate-500 uppercase tracking-wider mb-3">Account</div>
+            <div class="space-y-2">
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Balance</span>
+                    <span id="balance" class="font-mono font-bold text-white">--</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Equity</span>
+                    <span id="equity" class="font-mono font-bold text-indigo-400">--</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Floating</span>
+                    <span id="floating" class="font-mono text-slate-300">--</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Open Trades</span>
+                    <span id="openTrades" class="font-bold">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Regime Display -->
+        <div class="glass rounded-xl p-5">
+            <div class="text-xs text-slate-500 uppercase tracking-wider mb-3">Market Regime</div>
+            <div class="text-center">
+                <div id="regimeBadge" class="regime-badge bg-slate-600 text-slate-300 mb-3 mx-auto inline-block">
+                    UNKNOWN
+                </div>
+                <div class="text-3xl font-bold text-white mb-1" id="regimeName">--</div>
+                <div class="text-xs text-slate-500">Confidence: <span id="regimeConf" class="text-indigo-400">--</span></div>
+                <div class="mt-3 text-xs text-slate-400 text-center" id="regimeStrategy">No strategy loaded</div>
+            </div>
+        </div>
+
+        <!-- SMS Status -->
+        <div class="glass rounded-xl p-5">
+            <div class="text-xs text-slate-500 uppercase tracking-wider mb-3">Smart Money</div>
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Order Blocks</span>
+                    <span id="obCount" class="font-bold text-white">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Fair Value Gaps</span>
+                    <span id="fvgCount" class="font-bold text-indigo-400">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Liquidity Zones</span>
+                    <span id="liqCount" class="font-bold text-purple-400">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Delta</span>
+                    <span id="deltaStatus" class="font-bold">OFF</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance -->
+        <div class="glass rounded-xl p-5">
+            <div class="text-xs text-slate-500 uppercase tracking-wider mb-3">Performance</div>
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Win Rate</span>
+                    <span id="winRate" class="font-bold text-white">--</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Profit Factor</span>
+                    <span id="profitFactor" class="font-bold text-indigo-400">--</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Max Drawdown</span>
+                    <span id="maxDD" class="font-bold text-red-400">--</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Total Trades</span>
+                    <span id="totalTrades" class="font-bold">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Net P&L</span>
+                    <span id="netPnL" class="font-bold">--</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT COLUMN: Charts + Trades -->
+    <div class="col-span-12 lg:col-span-9 space-y-4">
+
+        <!-- Equity Curve + Regime Heatmap -->
+        <div class="glass rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <div class="text-sm font-bold">Equity Curve</div>
+                <div class="flex gap-4 text-xs">
+                    <div class="flex items-center gap-1"><div class="w-3 h-3 rounded bg-indigo-500"></div><span>Equity</span></div>
+                    <div class="flex items-center gap-1"><div class="w-3 h-3 rounded bg-red-500/30"></div><span>Drawdown</span></div>
+                </div>
+            </div>
+            <div id="equityChart" class="h-48 relative">
+                <canvas id="equityCanvas" class="w-full h-full"></canvas>
+            </div>
+        </div>
+
+        <!-- Recent Trades -->
+        <div class="glass rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <div class="text-sm font-bold">Recent Trades</div>
+                <div class="text-xs text-slate-500">Last 20</div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-500 text-xs uppercase">
+                            <th class="text-left pb-3">Ticket</th>
+                            <th class="text-left pb-3">Time</th>
+                            <th class="text-left pb-3">Symbol</th>
+                            <th class="text-left pb-3">Type</th>
+                            <th class="text-right pb-3">Lots</th>
+                            <th class="text-right pb-3">Open</th>
+                            <th class="text-right pb-3">Close</th>
+                            <th class="text-right pb-3">P&L</th>
+                            <th class="text-left pb-3">SMS Type</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tradesTable" class="text-slate-300">
+                        <tr><td colspan="9" class="text-center text-slate-600 py-8">No trades yet</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- AI Insights Feed -->
+        <div class="glass rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <i data-feather="cpu" class="w-4 h-4 text-indigo-400"></i>
+                    <div class="text-sm font-bold">AI Insights</div>
+                </div>
+                <div class="text-xs text-slate-500">Powered by nexus-llm</div>
+            </div>
+            <div id="insightsFeed" class="space-y-3 max-h-48 overflow-y-auto">
+                <div class="text-slate-600 text-sm italic">Loading AI insights...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// === FEATHER ICONS ===
+feather.replace();
+
+// === API CONFIG ===
+const API_HOST = 'http://localhost:8000';
+
+// === STATE ===
+let ws = null;
+let equityData = [];
+
+// === INIT ===
+async function init() {
+    updateServerTime();
+    setInterval(updateServerTime, 1000);
+    await loadData();
+    connectWebSocket();
+    setInterval(loadData, 30000); // Refresh every 30s
+}
+
+// === SERVER TIME ===
+function updateServerTime() {
+    const now = new Date();
+    document.getElementById('serverTime').textContent = now.toLocaleTimeString();
+}
+
+// === LOAD DATA ===
+async function loadData() {
+    try {
+        // Connection status
+        updateConnectionStatus(true);
+
+        // Metrics
+        const metricsRes = await fetch(`${API_HOST}/api/v1/metrics?days=30&limit=1`);
+        const metricsData = await metricsRes.json();
+        if (metricsData.metrics && metricsData.metrics.length > 0) {
+            const m = metricsData.metrics[0];
+            document.getElementById('balance').textContent = formatCurrency(m.balance);
+            document.getElementById('equity').textContent = formatCurrency(m.equity);
+            document.getElementById('openTrades').textContent = m.open_trades;
+        }
+
+        // Trade stats
+        const statsRes = await fetch(`${API_HOST}/api/v1/trades/stats?days=30`);
+        const stats = await statsRes.json();
+        if (!stats.error) {
+            document.getElementById('winRate').textContent = (stats.win_rate * 100).toFixed(1) + '%';
+            document.getElementById('profitFactor').textContent = stats.profit_factor.toFixed(2);
+            document.getElementById('maxDD').textContent = (stats.max_drawdown * 100 || 0).toFixed(1) + '%';
+            document.getElementById('totalTrades').textContent = stats.total_trades || 0;
+            const netPnl = stats.net_profit || 0;
+            const pnlEl = document.getElementById('netPnL');
+            pnlEl.textContent = formatCurrency(netPnl);
+            pnlEl.className = `font-bold ${netPnl >= 0 ? 'win' : 'loss'}`;
+        }
+
+        // Trades
+        const tradesRes = await fetch(`${API_HOST}/api/v1/trades/recent?limit=20`);
+        const tradesData = await tradesRes.json();
+        renderTrades(tradesData.trades || []);
+
+        // Equity curve
+        const equityRes = await fetch(`${API_HOST}/api/v1/metrics/equity_curve?days=30`);
+        const equityDataRes = await equityRes.json();
+        renderEquityCurve(equityDataRes.equity_curve || []);
+
+        // Regime
+        const regimeRes = await fetch(`${API_HOST}/api/v1/regime/current`);
+        const regime = await regimeRes.json();
+        renderRegime(regime);
+
+        // LLM insight
+        await loadLLMInsight();
+
+    } catch (e) {
+        console.error('Data load error:', e);
+        updateConnectionStatus(false);
+    }
+}
+
+// === WEBSOCKET ===
+function connectWebSocket() {
+    const wsUrl = API_HOST.replace('http', 'ws') + '/ws';
+    try {
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => updateConnectionStatus(true);
+        ws.onmessage = (msg) => {
+            const data = JSON.parse(msg.data);
+            if (data.type === 'trade') renderTrades([data]);
+            if (data.type === 'regime') renderRegime(data);
+        };
+        ws.onclose = () => {
+            setTimeout(connectWebSocket, 5000);
+        };
+        ws.onerror = () => ws.close();
+    } catch (e) {
+        setTimeout(connectWebSocket, 5000);
+    }
+}
+
+// === RENDER FUNCTIONS ===
+function renderTrades(trades) {
+    const tbody = document.getElementById('tradesTable');
+    if (!trades || trades.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-slate-600 py-8">No trades yet</td></tr>';
+        return;
+    }
+    tbody.innerHTML = trades.map(t => `
+        <tr class="border-t border-slate-700/30 hover:bg-slate-800/30">
+            <td class="py-2 font-mono">#${t.ticket}</td>
+            <td class="py-2 text-xs">${t.close_time ? t.close_time.split(' ')[1] || t.close_time : '--'}</td>
+            <td class="py-2">${t.symbol}</td>
+            <td class="py-2 ${t.type === 'BUY' ? 'win' : 'loss'}">${t.type || '--'}</td>
+            <td class="py-2 text-right font-mono">${(t.lots || 0).toFixed(2)}</td>
+            <td class="py-2 text-right font-mono">${t.open_price ? t.open_price.toFixed(5) : '--'}</td>
+            <td class="py-2 text-right font-mono">${t.close_price ? t.close_price.toFixed(5) : '--'}</td>
+            <td class="py-2 text-right font-mono ${(t.profit || 0) >= 0 ? 'win' : 'loss'}">${formatCurrency(t.profit || 0)}</td>
+            <td class="py-2 text-xs text-slate-500">${t.sms_type || '--'}</td>
+        </tr>
+    `).join('');
+}
+
+function renderRegime(regime) {
+    const regimeNames = {
+        0: 'TRENDING_STRONG', 1: 'TRENDING_WEAK', 2: 'RANGING',
+        3: 'VOLATILE', 4: 'LOW_VOLUME', 5: 'BREAKOUT', 6: 'UNKNOWN'
+    };
+    const strategies = {
+        0: 'Ride trend. Trail aggressively.',
+        1: 'Small entries. Tight SL.',
+        2: 'Mean reversion at SR levels.',
+        3: 'Reduce size 50%. Widen SL.',
+        4: 'Sit out or micro only.',
+        5: 'Avoid. Wait for retest.',
+        6: 'Ultra-conservative.'
+    };
+    const colors = {
+        0: 'bg-green-500/20 text-green-400 border-green-500/30',
+        1: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+        2: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+        3: 'bg-red-500/20 text-red-400 border-red-500/30',
+        4: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+        5: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+        6: 'bg-slate-600/20 text-slate-300 border-slate-500/30'
+    };
+
+    const r = regime.regime || 6;
+    document.getElementById('regimeName').textContent = regimeNames[r] || 'UNKNOWN';
+    document.getElementById('regimeConf').textContent = regime.confidence ? (regime.confidence * 100).toFixed(0) + '%' : '--';
+    document.getElementById('regimeStrategy').textContent = strategies[r] || 'No strategy';
+    document.getElementById('regimeBadge').className = `regime-badge border ${colors[r]}`;
+}
+
+function renderEquityCurve(data) {
+    const canvas = document.getElementById('equityCanvas');
+    if (!canvas || !data || data.length === 0) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.offsetWidth;
+    const h = canvas.offsetHeight;
+    canvas.width = w;
+    canvas.height = h;
+
+    ctx.clearRect(0, 0, w, h);
+    const equities = data.map(d => d.equity);
+    const maxE = Math.max(...equities);
+    const minE = Math.min(...equities);
+    const range = maxE - minE || 1;
+
+    // Draw equity line
+    ctx.beginPath();
+    ctx.strokeStyle = '#6366f1';
+    ctx.lineWidth = 2;
+    data.forEach((d, i) => {
+        const x = (i / (data.length - 1)) * w;
+        const y = h - ((d.equity - minE) / range) * (h - 20) - 10;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Draw drawdown area
+    if (equities[0]) {
+        const startEquity = equities[0];
+        ctx.fillStyle = 'rgba(239,68,68,0.15)';
+        ctx.beginPath();
+        data.forEach((d, i) => {
+            const x = (i / (data.length - 1)) * w;
+            const y = h - ((startEquity - minE) / range) * (h - 20) - 10;
+            const ddY = h - ((d.equity - minE) / range) * (h - 20) - 10;
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            ctx.lineTo(x, Math.max(y, ddY));
+        });
+        ctx.closePath();
+        ctx.fill();
+    }
+}
+
+async function loadLLMInsight() {
+    try {
+        const res = await fetch('http://localhost:8002/api/v1/llm/insight', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol: 'EURUSD', regime: 0, price: 1.085, trend: 'bullish' })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            const feed = document.getElementById('insightsFeed');
+            feed.innerHTML = `
+                <div class="p-3 rounded bg-indigo-500/10 border border-indigo-500/20 text-sm text-slate-300">
+                    <div class="flex items-center gap-2 mb-1">
+                        <i data-feather="sparkles" class="w-3 h-3 text-indigo-400"></i>
+                        <span class="text-xs text-indigo-400 font-bold">NEXUS AI</span>
+                        <span class="text-xs text-slate-500">${new Date().toLocaleTimeString()}</span>
+                    </div>
+                    ${data.insight || 'AI insights unavailable'}
+                </div>
+            ` + feed.innerHTML;
+            feather.replace();
+        }
+    } catch (e) {
+        const feed = document.getElementById('insightsFeed');
+        feed.innerHTML = `<div class="text-slate-600 text-xs">AI insights: nexus-llm not connected</div>` + feed.innerHTML;
+    }
+}
+
+function updateConnectionStatus(connected) {
+    const el = document.getElementById('connectionStatus');
+    el.innerHTML = `
+        <div class="w-2 h-2 rounded-full ${connected ? 'pulse-green bg-green-500' : 'bg-slate-500'}"></div>
+        <span class="text-sm ${connected ? 'text-green-400' : 'text-slate-400'}">${connected ? 'Connected' : 'Disconnected'}</span>
+    `;
+}
+
+function formatCurrency(val) {
+    return (val >= 0 ? '+' : '') + '$' + (val || 0).toFixed(2);
+}
+
+// Start
+init();
+</script>
+</body>
+</html>

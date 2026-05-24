@@ -1,0 +1,972 @@
+//+------------------------------------------------------------------+
+//|                                          nexus-core.nexus-mq4    |
+//|                                    VicChelenge System v1.0       |
+//|                                       Cuancux Algo Traders       |
+//|                                                                 |
+//|  OUT-OF-THE-BOX STRATEGY:                                       |
+//|  1. Smart Money Structure (Order Blocks, FVGs, Liquidity)       |
+//|  2. Market Regime Detection (via nexus-regime API)              |
+//|  3. Delta Absorption (volume imbalance detection)                |
+//|  4. Adaptive Position Sizing (regime confidence-weighted)        |
+//|  5. Multi-Timeframe Confirmation (H4/H1/M15/M5)                |
+//|                                                                 |
+//|  NO MARTINGALE. NO GRID. NO GAMBLE.                             |
+//|  PURE INSTITUTIONAL FLOW + AI INSIGHTS.                        |
+//+------------------------------------------------------------------+
+#property copyright "VicChelenge System - Cuancux Algo Traders"
+#property link      "https://github.com/cuancux/VicChelenge-System"
+#property version   "1.0"
+#property strict
+
+//+------------------------------------------------------------------+
+//| INPUTS - API CONFIG                                              |
+//+------------------------------------------------------------------+
+input group "=== NEXUS API CONNECTION ==="
+input string   InpAPIHost      = "http://localhost:8000"; // Nexus API Host
+input string   InpAPIKey      = "nexus-secret-key-2026"; // API Auth Key
+input int      InpAPITimeout  = 5000;                   // API timeout (ms)
+input bool     InpUseAPI      = true;                   // Enable API regime detection
+input int      InpAPIRetry    = 3;                     // Max API retry on failure
+
+//+------------------------------------------------------------------+
+//| INPUTS - SMART MONEY STRUCTURE                                    |
+//+------------------------------------------------------------------+
+input group "=== SMART MONEY STRUCTURE ==="
+input bool     InpUseSMS      = true;                   // Enable Smart Money Structure
+input int      InpOBLookback  = 10;                    // Order Block lookback bars
+input int      InpFVGLookback = 3;                     // Fair Value Gap lookback bars
+input double   InpFVGMit      = 0.5;                   // FVG mitigation % (0.5 = 50%)
+input int      InpLiquiLookback=5;                     // Liquidity grab lookback bars
+input double   InpBreakerLookback=3.0;                 // Breaker block confirmation bars
+
+//+------------------------------------------------------------------+
+//| INPUTS - MARKET REGIME (Manual Fallback)                          |
+//+------------------------------------------------------------------+
+input group "=== MARKET REGIME (Fallback if API off) ==="
+input ENUM_REGIME InpRegime   = REGIME_TRENDING;       // Current regime
+input double      InpRegimeConf=0.7;                   // Regime confidence (0-1)
+
+enum ENUM_REGIME {
+   REGIME_TRENDING_STRONG=0,  // ADX>25, EMA aligned
+   REGIME_TRENDING_WEAK=1,    // ADX 15-25
+   REGIME_RANGING=2,          // ADX<15, MA sandwich
+   REGIME_VOLATILE=3,         // ATR > 2x MA
+   REGIME_LOW_VOLUME=4,       // Volume < 50% avg
+   REGIME_BREAKOUT=5,         // Pump/dump pattern
+   REGIME_UNKNOWN=6
+};
+
+//+------------------------------------------------------------------+
+//| INPUTS - MULTI-TIMEFRAME                                         |
+//+------------------------------------------------------------------+
+input group "=== MULTI-TIMEFRAME ==="
+input ENUM_TIMEFRAMES InpHTF   = PERIOD_H4;            // Higher TF (trend)
+input ENUM_TIMEFRAMES InpMTF   = PERIOD_H1;            // Medium TF (zone)
+input ENUM_TIMEFRAMES InpLTF   = PERIOD_M15;           // Lower TF (entry)
+
+//+------------------------------------------------------------------+
+//| INPUTS - DELTA ABSORPTION                                         |
+//+------------------------------------------------------------------+
+input group "=== DELTA ABSORPTION ==="
+input bool     InpUseDelta    = true;                   // Enable delta detection
+input int      InpDeltaPeriod= 20;                     // Delta SMA period
+input double   InpDeltaThreshold=0.3;                  // Absorption threshold
+
+//+------------------------------------------------------------------+
+//| INPUTS - RISK MANAGEMENT                                         |
+//+------------------------------------------------------------------+
+input group "=== RISK MANAGEMENT ==="
+input double   InpRiskPercent = 1.0;                   // Max risk per trade (%)
+input double   InpMaxRiskPerDay=3.0;                  // Max risk per day (%)
+input int      InpMaxTradesPerDay=5;                  // Max trades per day
+input double   InpMaxDDPercent = 15.0;                // Max drawdown % (pause)
+input int      InpMaxOpenTrades=3;                   // Max concurrent trades
+input int      InpSlippage    = 3;                    // Slippage points
+input bool     InpUseBreakeven=false;                // Move SL to BE after 1R
+input double   InpTrailingStart=2.0;                  // Trail start (R units)
+input double   InpTrailingStep =0.5;                  // Trail step (R units)
+
+//+------------------------------------------------------------------+
+//| INPUTS - TRADING                                                 |
+//+------------------------------------------------------------------+
+input group "=== TRADING ==="
+input int      InpMagic       = 2026001;              // Magic number
+input int      InpMaxSpread   = 25;                   // Max spread points
+input int      InpTradeHourStart=8;                   // Trade window start (server hour)
+input int      InpTradeHourEnd=20;                    // Trade window end (server hour)
+input bool     InpUseSessionFilter=true;              // Enable session filter
+
+//+------------------------------------------------------------------+
+//| INTERNALS                                                        |
+//+------------------------------------------------------------------+
+datetime g_barTimes[4];
+datetime g_lastAPICall   = 0;
+datetime g_lastTradeTime= 0;
+int      g_tradesToday    = 0;
+datetime g_dayStart      = 0;
+double   g_riskToday      = 0.0;
+double   g_equityPeak     = 0.0;
+ENUM_REGIME g_currentRegime = REGIME_UNKNOWN;
+double   g_regimeConf     = 0.5;
+
+//+------------------------------------------------------------------+
+//| STRUCTS                                                           |
+//+------------------------------------------------------------------+
+
+struct SSMSBlock {
+   double high;
+   double low;
+   datetime time;
+   bool isBullish;
+   double volume;
+};
+
+struct SFVG {
+   double gapHigh;
+   double gapLow;
+   datetime time;
+   double size;
+   double mitigated; // 0-1
+};
+
+struct SLiquidityZone {
+   double price;
+   datetime time;
+   string zoneType; // "sweep_high", "sweep_low", "breaker"
+   bool confirmed;
+};
+
+struct STradeSignal {
+   ENUM_ORDER_TYPE tradeType;
+   double entry;
+   double sl;
+   double tp;
+   double confidence;
+   string rationale;
+   string smsType;      // "order_block", "fvg", "liq_sweep", "breaker"
+   ENUM_REGIME regime;
+   double riskReward;
+};
+
+//+------------------------------------------------------------------+
+//| CSMSEngine - Smart Money Structure Engine                         |
+//+------------------------------------------------------------------+
+class CSMSEngine {
+private:
+   string m_sym;
+   SSMSBlock m_orderBlocks[];
+   SFVG      m_fvgs[];
+   SLiquidityZone m_liquidity[];
+
+public:
+   CSMSEngine(string sym) { m_sym = sym; }
+   
+   //--- DETECT ORDER BLOCKS ---
+   // Order Block = candle before a strong move (institutional activity)
+   // Bullish OB = bearish candle before bullish impulse
+   // Bearish OB = bullish candle before bearish impulse
+   void DetectOrderBlocks() {
+      ArrayResize(m_orderBlocks, 0);
+      int lookback = InpOBLookback;
+      
+      for(int i = lookback; i >= 2; i--) {
+         double c0 = iClose(m_sym, PERIOD_D1, i);
+         double o0 = iOpen(m_sym, PERIOD_D1, i);
+         double h0 = iHigh(m_sym, PERIOD_D1, i);
+         double l0 = iLow(m_sym, PERIOD_D1, i);
+         double v0 = iVolume(m_sym, PERIOD_D1, i);
+         
+         double c1 = iClose(m_sym, PERIOD_D1, i-1);
+         double h1 = iHigh(m_sym, PERIOD_D1, i-1);
+         double l1 = iLow(m_sym, PERIOD_D1, i-1);
+         
+         double impulse = MathAbs(c1 - c0);
+         double range  = h1 - l1;
+         bool isStrongMove = (impulse > range * 0.7); // 70% of range = strong
+         bool highVolume   = (v0 > iVolume(m_sym, PERIOD_D1, i+5) * 1.3);
+         
+         if(!isStrongMove || !highVolume) continue;
+         
+         int idx = ArraySize(m_orderBlocks);
+         ArrayResize(m_orderBlocks, idx + 1);
+         
+         if(c0 < o0) { // Bearish candle before bullish = Bullish OB
+            m_orderBlocks[idx].high     = h0;
+            m_orderBlocks[idx].low     = l0;
+            m_orderBlocks[idx].isBullish = true;
+            m_orderBlocks[idx].volume  = v0;
+            m_orderBlocks[idx].time    = iTime(m_sym, PERIOD_D1, i);
+         } else if(c0 > o0) { // Bullish candle before bearish = Bearish OB
+            m_orderBlocks[idx].high     = h0;
+            m_orderBlocks[idx].low     = l0;
+            m_orderBlocks[idx].isBullish = false;
+            m_orderBlocks[idx].volume  = v0;
+            m_orderBlocks[idx].time    = iTime(m_sym, PERIOD_D1, i);
+         }
+      }
+   }
+   
+   //--- DETECT FAIR VALUE GAPS ---
+   // FVG = gap between two candles (inefficiency zone)
+   void DetectFVGs() {
+      ArrayResize(m_fvgs, 0);
+      int lookback = InpFVGLookback;
+      
+      for(int i = lookback; i >= 1; i--) {
+         double c1 = iClose(m_sym, PERIOD_D1, i+1);
+         double h1 = iHigh(m_sym, PERIOD_D1, i+1);
+         double l1 = iLow(m_sym, PERIOD_D1, i+1);
+         double o0 = iOpen(m_sym, PERIOD_D1, i);
+         double c0 = iClose(m_sym, PERIOD_D1, i);
+         double h0 = iHigh(m_sym, PERIOD_D1, i);
+         double l0 = iLow(m_sym, PERIOD_D1, i);
+         
+         // Bullish FVG: candle i gap below candle i+1
+         double bullishGapLow  = h1;
+         double bullishGapHigh = l0;
+         
+         // Bearish FVG: candle i gap above candle i+1
+         double bearishGapLow  = h0;
+         double bearishGapHigh = l1;
+         
+         bool hasBullFVG = (bullishGapHigh < bullishGapLow);
+         bool hasBearFVG = (bearishGapLow > bearishGapHigh);
+         
+         if(hasBullFVG) {
+            int idx = ArrayResize(m_fvgs, ArraySize(m_fvgs) + 1);
+            m_fvgs[idx-1].gapHigh = bullishGapLow;
+            m_fvgs[idx-1].gapLow = bullishGapHigh;
+            m_fvgs[idx-1].size   = bullishGapLow - bullishGapHigh;
+            m_fvgs[idx-1].time   = iTime(m_sym, PERIOD_D1, i);
+            m_fvgs[idx-1].mitigated = 0.0;
+         }
+         
+         if(hasBearFVG) {
+            int idx = ArrayResize(m_fvgs, ArraySize(m_fvgs) + 1);
+            m_fvgs[idx-1].gapHigh = bearishGapLow;
+            m_fvgs[idx-1].gapLow = bearishGapHigh;
+            m_fvgs[idx-1].size   = bearishGapLow - bearishGapHigh;
+            m_fvgs[idx-1].time   = iTime(m_sym, PERIOD_D1, i);
+            m_fvgs[idx-1].mitigated = 0.0;
+         }
+      }
+   }
+   
+   //--- DETECT LIQUIDITY SWEEPS ---
+   // Liquidity grab = price hunts above/below key levels (stops)
+   void DetectLiquiditySweeps() {
+      ArrayResize(m_liquidity, 0);
+      int lookback = InpLiquiLookback;
+      
+      double recentHighs[];
+      double recentLows[];
+      ArrayResize(recentHighs, lookback);
+      ArrayResize(recentLows, lookback);
+      
+      for(int i = 0; i < lookback; i++) {
+         recentHighs[i] = iHigh(m_sym, PERIOD_D1, i);
+         recentLows[i] = iLow(m_sym, PERIOD_D1, i);
+      }
+      
+      // Check for sweep of recent highs
+      double lastHigh = recentHighs[0];
+      double lastLow  = recentLows[0];
+      double price = Close(1);
+      double wick  = High(1) - Low(1);
+      double body  = MathAbs(Close(1) - Open(1));
+      
+      if(High(1) > lastHigh * 0.9995 && wick > body * 2) {
+         // Wick above recent high = liquidity sweep
+         int idx = ArrayResize(m_liquidity, ArraySize(m_liquidity) + 1);
+         m_liquidity[idx-1].price     = lastHigh;
+         m_liquidity[idx-1].time      = Time(1);
+         m_liquidity[idx-1].zoneType  = "sweep_high";
+         m_liquidity[idx-1].confirmed = true;
+      }
+      
+      if(Low(1) < lastLow * 1.0005 && wick > body * 2) {
+         int idx = ArrayResize(m_liquidity, ArraySize(m_liquidity) + 1);
+         m_liquidity[idx-1].price     = lastLow;
+         m_liquidity[idx-1].time      = Time(1);
+         m_liquidity[idx-1].zoneType  = "sweep_low";
+         m_liquidity[idx-1].confirmed = true;
+      }
+   }
+   
+   //--- CHECK IF PRICE IN ORDER BLOCK ZONE ---
+   double GetOBZoneScore(double price, bool isLong) {
+      double score = 0;
+      for(int i = 0; i < ArraySize(m_orderBlocks); i++) {
+         double zoneHigh = m_orderBlocks[i].high;
+         double zoneLow  = m_orderBlocks[i].low;
+         
+         if(price >= zoneLow * 0.9995 && price <= zoneHigh * 1.0005) {
+            if((isLong && m_orderBlocks[i].isBullish) ||
+               (!isLong && !m_orderBlocks[i].isBullish)) {
+               score += m_orderBlocks[i].volume / 1000.0;
+            }
+         }
+      }
+      return MathMin(score, 1.0);
+   }
+   
+   //--- CHECK IF PRICE IN FVG ZONE ---
+   double GetFVGZoneScore(double price) {
+      double score = 0;
+      for(int i = 0; i < ArraySize(m_fvgs); i++) {
+         if(price >= m_fvgs[i].gapLow && price <= m_fvgs[i].gapHigh) {
+            score += 0.3;
+         }
+      }
+      return MathMin(score, 1.0);
+   }
+   
+   //--- GET LIQUIDITY CONTEXT ---
+   string GetLiquidityContext() {
+      for(int i = 0; i < ArraySize(m_liquidity); i++) {
+         double dist = MathAbs(Close(1) - m_liquidity[i].price) / Point;
+         if(dist < 100) { // within 100 points
+            return m_liquidity[i].zoneType;
+         }
+      }
+      return "none";
+   }
+   
+   int GetOBTotal() { return ArraySize(m_orderBlocks); }
+   int GetFVGTotal() { return ArraySize(m_fvgs); }
+   int GetLiqTotal() { return ArraySize(m_liquidity); }
+};
+
+//+------------------------------------------------------------------+
+//| CDeltaEngine - Volume Delta Analysis Engine                      |
+//+------------------------------------------------------------------+
+class CDeltaEngine {
+private:
+   string m_sym;
+   double m_deltas[];
+   double m_deltaSMA;
+   
+public:
+   CDeltaEngine(string sym) { m_sym = sym; }
+   
+   // Calculate delta from tick volume (proxy for real delta)
+   double CalcCurrentDelta() {
+      double ticks = iVolume(m_sym, PERIOD_M1, 0);
+      double avgTick = 0;
+      for(int i = 1; i <= InpDeltaPeriod; i++) {
+         avgTick += iVolume(m_sym, PERIOD_M1, i);
+      }
+      avgTick /= InpDeltaPeriod;
+      
+      double delta = (ticks - avgTick) / avgTick;
+      return delta;
+   }
+   
+   bool IsAbsorption() {
+      double delta = CalcCurrentDelta();
+      bool highAbsorption = MathAbs(delta) > InpDeltaThreshold;
+      bool consolidating = (iHigh(m_sym, PERIOD_M1, 0) - iLow(m_sym, PERIOD_M1, 0)) < 
+                           (iHigh(m_sym, PERIOD_M1, 1) - iLow(m_sym, PERIOD_M1, 1));
+      return highAbsorption && consolidating;
+   }
+};
+
+//+------------------------------------------------------------------+
+//| CTradeManager - Clean trade operations                           |
+//+------------------------------------------------------------------+
+class CTradeManager {
+public:
+   int      m_magic;
+   string   m_sym;
+   datetime m_lastTrade;
+   
+   CTradeManager(int magic, string sym) {
+      m_magic = magic;
+      m_sym   = sym;
+      m_lastTrade = 0;
+   }
+   
+   int CountOpenOrders() {
+      int cnt = 0;
+      for(int i = OrdersTotal() - 1; i >= 0; i--) {
+         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+         if(OrderSymbol() != m_sym) continue;
+         if(OrderMagicNumber() != m_magic) continue;
+         if(OrderType() > OP_SELL) continue;
+         cnt++;
+      }
+      return cnt;
+   }
+   
+   double CalcLotRisk(double riskPct, double slPoints) {
+      double freeMargin = AccountFreeMargin();
+      if(freeMargin <= 0 || slPoints <= 0) return 0.01;
+      double riskAmt = freeMargin * (riskPct / 100.0);
+      double tickVal = MarketInfo(m_sym, MODE_TICKVALUE);
+      if(tickVal <= 0) tickVal = 1.0;
+      double pipCost = tickVal * slPoints * Point;
+      if(pipCost <= 0) pipCost = 1.0;
+      double lot = NormalizeDouble(riskAmt / pipCost, 2);
+      double minLot = MarketInfo(m_sym, MODE_MINLOT);
+      double maxLot = MarketInfo(m_sym, MODE_MAXLOT);
+      return MathMax(minLot, MathMin(maxLot, lot));
+   }
+   
+   bool OpenOrder(STradeSignal& sig, string comment) {
+      if(CountOpenOrders() >= InpMaxOpenTrades) {
+         Print("[nexus] Max open trades reached");
+         return false;
+      }
+      
+      RefreshRates();
+      
+      double price, sl, tp;
+      int cmd;
+      
+      if(sig.tradeType == ORDER_TYPE_BUY) {
+         price = Ask;
+         sl    = NormalizeDouble(price - sig.sl * Point, Digits);
+         tp    = NormalizeDouble(price + sig.tp * Point, Digits);
+         cmd   = OP_BUY;
+      } else {
+         price = Bid;
+         sl    = NormalizeDouble(price + sig.sl * Point, Digits);
+         tp    = NormalizeDouble(price - sig.tp * Point, Digits);
+         cmd   = OP_SELL;
+      }
+      
+      double lot = CalcLotRisk(InpRiskPercent, sig.sl);
+      
+      // Confidence-weighted lot sizing
+      lot = lot * sig.confidence;
+      lot = NormalizeDouble(MathMax(MarketInfo(m_sym, MODE_MINLOT), lot), 2);
+      
+      string fullComment = StringFormat("nexus|%s|%s|%.0f%%", 
+         sig.smsType, sig.regime == REGIME_TRENDING_STRONG ? "TREND" : 
+         (sig.regime == REGIME_RANGING ? "RANGE" : "MIXED"),
+         sig.confidence * 100);
+      
+      int ticket = OrderSend(m_sym, cmd, lot, price, InpSlippage, sl, tp, fullComment, m_magic, 0,
+                             (sig.tradeType == ORDER_TYPE_BUY) ? clrBlue : clrRed);
+      
+      if(ticket < 0) {
+         Print("[OrderSend Error] Err:", GetLastError(), " | Signal:", sig.smsType, 
+               " | Conf:", sig.confidence);
+         return false;
+      }
+      
+      m_lastTrade = TimeCurrent();
+      Print("[NEXUS OPEN] Ticket:", ticket, " | Type:", EnumToString(sig.tradeType),
+            " | SMS:", sig.smsType, " | Conf:", sig.confidence, " | RR:", sig.riskReward);
+      return true;
+   }
+   
+   void TrailStop(double trailStartR, double trailStepR) {
+      for(int i = OrdersTotal() - 1; i >= 0; i--) {
+         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+         if(OrderSymbol() != m_sym) continue;
+         if(OrderMagicNumber() != m_magic) continue;
+         if(OrderType() > OP_SELL) continue;
+         
+         double openPrice   = OrderOpenPrice();
+         double currentSL   = OrderStopLoss();
+         double currentTP   = OrderTakeProfit();
+         double orderRR     = (OrderType() == ORDER_TYPE_BUY) ? 
+                              ((Bid - openPrice) / Point / (openPrice - currentSL) * Point) :
+                              ((openPrice - Ask) / Point / (currentSL - openPrice) * Point);
+         
+         if(orderRR >= trailStartR) {
+            double step     = trailStepR * (orderRR - trailStartR);
+            double newSL;
+            
+            if(OrderType() == ORDER_TYPE_BUY) {
+               newSL = currentSL;
+               double potentialSL = Bid - step * Point;
+               if(potentialSL > currentSL + MarketInfo(m_sym, MODE_POINT)) {
+                  newSL = NormalizeDouble(potentialSL, Digits);
+               }
+            } else {
+               newSL = currentSL;
+               double potentialSL = Ask + step * Point;
+               if(potentialSL < currentSL - MarketInfo(m_sym, MODE_POINT)) {
+                  newSL = NormalizeDouble(potentialSL, Digits);
+               }
+            }
+            
+            if(MathAbs(newSL - currentSL) > MarketInfo(m_sym, MODE_POINT)) {
+               OrderModify(OrderTicket(), openPrice, newSL, currentTP, 0, clrNONE);
+            }
+         }
+      }
+   }
+};
+
+//+------------------------------------------------------------------+
+//| CNexusAPI - HTTP API Communication                                |
+//+------------------------------------------------------------------+
+class CNexusAPI {
+private:
+   string m_host;
+   string m_key;
+   int    m_timeout;
+   
+public:
+   CNexusAPI(string host, string key, int timeout) {
+      m_host    = host;
+      m_key     = key;
+      m_timeout = timeout;
+   }
+   
+   // Get regime from Python backend
+   ENUM_REGIME GetRegime(string symbol, double& confidence) {
+      if(!InpUseAPI) return InpRegime;
+      
+      string url = m_host + "/api/v1/regime/classify";
+      string headers = "Content-Type: application/json\r\nAuthorization: Bearer " + m_key + "\r\n";
+      
+      string postData = StringFormat(
+         "{\"symbol\":\"%s\",\"tf\":\"%s\",\"adx\":%.4f,\"atr\":%.5f,\"rsi\":%.2f,\"volume_ratio\":%.2f}",
+         symbol, "H4",
+         iADX(symbol, PERIOD_H4, 14, MAIN, 1),
+         iATR(symbol, PERIOD_H4, 14, 1),
+         iRSI(symbol, PERIOD_H4, 14, PRICE_CLOSE, 1),
+         iVolume(symbol, PERIOD_H4, 0) / iVolume(symbol, PERIOD_H4, 10)
+      );
+      
+      string result = "";
+      int res = WebRequest("GET", url, headers, m_timeout, postData, result);
+      
+      if(res == -1) {
+         Print("[NexusAPI] WebRequest failed. Falling back to manual regime.");
+         return InpRegime;
+      }
+      
+      // Parse JSON response (simplified)
+      // Expected: {"regime": 0, "confidence": 0.85}
+      int regimeIdx = (int)InpRegime;
+      confidence = 0.7;
+      
+      int regimePos = StringFind(result, "\"regime\":");
+      if(regimePos >= 0) {
+         string val = StringSubstr(result, regimePos + 9, 2);
+         regimeIdx = (int)StringToDouble(val);
+      }
+      
+      int confPos = StringFind(result, "\"confidence\":");
+      if(confPos >= 0) {
+         string val = StringSubstr(result, confPos + 13, 4);
+         confidence = StringToDouble(val);
+      }
+      
+      return (ENUM_REGIME)regimeIdx;
+   }
+   
+   // Send trade log to backend
+   void LogTrade(int ticket, string action, string rationale) {
+      if(!InpUseAPI) return;
+      
+      string url = m_host + "/api/v1/trades/log";
+      string headers = "Content-Type: application/json\r\nAuthorization: Bearer " + m_key + "\r\n";
+      
+      string postData = StringFormat(
+         "{\"ticket\":%d,\"action\":\"%s\",\"rationale\":\"%s\",\"time\":\"%s\",\"balance\":%.2f}",
+         ticket, action, rationale, TimeToStr(TimeCurrent(), TIME_DATE|TIME_MINUTES), AccountBalance()
+      );
+      
+      string result = "";
+      WebRequest("POST", url, headers, m_timeout, postData, result);
+   }
+   
+   // Get LLM analysis for current market
+   string GetLLMInsight(string symbol) {
+      if(!InpUseAPI) return "";
+      
+      string url = m_host + "/api/v1/llm/insight";
+      string headers = "Content-Type: application/json\r\nAuthorization: Bearer " + m_key + "\r\n";
+      
+      string postData = StringFormat(
+         "{\"symbol\":\"%s\",\"regime\":%d,\"price\":%.5f,\"trend\":\"%s\"}",
+         symbol, (int)g_currentRegime,
+         Close(1),
+         g_currentRegime == REGIME_TRENDING_STRONG ? "bullish" :
+         (g_currentRegime == REGIME_RANGING ? "ranging" : "neutral")
+      );
+      
+      string result = "";
+      int res = WebRequest("POST", url, headers, m_timeout, postData, result);
+      
+      if(res >= 0 && result != "") return result;
+      return "";
+   }
+};
+
+//+------------------------------------------------------------------+
+//| GLOBAL INSTANCES                                                 |
+//+------------------------------------------------------------------+
+CSMSEngine*  g_sms;
+CDeltaEngine* g_delta;
+CTradeManager* g_trade;
+CNexusAPI*   g_api;
+
+//+------------------------------------------------------------------+
+//| ONINIT                                                            |
+//+------------------------------------------------------------------+
+int OnInit() {
+   g_sms   = new CSMSEngine(Symbol());
+   g_delta = new CDeltaEngine(Symbol());
+   g_trade = new CTradeManager(InpMagic, Symbol());
+   g_api   = new CNexusAPI(InpAPIHost, InpAPIKey, InpAPITimeout);
+   
+   g_barTimes[0] = iTime(Symbol(), InpHTF, 0);
+   g_barTimes[1] = iTime(Symbol(), InpMTF, 0);
+   g_barTimes[2] = iTime(Symbol(), InpLTF, 0);
+   g_barTimes[3] = iTime(Symbol(), PERIOD_M5, 0);
+   g_dayStart    = TimeCurrent();
+   g_equityPeak  = AccountEquity();
+   
+   Print("=== nexus-core Initialized ===");
+   Print("  Symbol  : ", Symbol());
+   Print("  HTF     : ", EnumToString(InpHTF));
+   Print("  MTF     : ", EnumToString(InpMTF));
+   Print("  LTF     : ", EnumToString(InpLTF));
+   Print("  SMS     : ", InpUseSMS ? "ON" : "OFF");
+   Print("  Delta   : ", InpUseDelta ? "ON" : "OFF");
+   Print("  API     : ", InpUseAPI ? "ON (connected to " + InpAPIHost + ")" : "OFF (manual regime)");
+   Print("  Risk    : ", InpRiskPercent, "% per trade | ", InpMaxTradesPerDay, " trades/day max");
+   
+   return INIT_SUCCEEDED;
+}
+
+//+------------------------------------------------------------------+
+//| ONDEINIT                                                          |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason) {
+   if(g_sms   != NULL) { delete g_sms;   g_sms   = NULL; }
+   if(g_delta != NULL) { delete g_delta; g_delta = NULL; }
+   if(g_trade != NULL) { delete g_trade; g_trade = NULL; }
+   if(g_api   != NULL) { delete g_api;   g_api   = NULL; }
+   Print("=== nexus-core Deinitialized ===");
+}
+
+//+------------------------------------------------------------------+
+//| ONTICK                                                            |
+//+------------------------------------------------------------------+
+void OnTick() {
+   // Bar change check
+   datetime nowBars[4];
+   nowBars[0] = iTime(Symbol(), InpHTF, 0);
+   nowBars[1] = iTime(Symbol(), InpMTF, 0);
+   nowBars[2] = iTime(Symbol(), InpLTF, 0);
+   nowBars[3] = iTime(Symbol(), PERIOD_M5, 0);
+   
+   bool newBar = false;
+   for(int i = 0; i < 4; i++) {
+      if(nowBars[i] != g_barTimes[i]) {
+         newBar = true;
+         g_barTimes[i] = nowBars[i];
+      }
+   }
+   
+   if(!newBar) return; // Only run on new bar
+   
+   // Daily reset
+   if(TimeDay(TimeCurrent()) != TimeDay(g_dayStart)) {
+      g_tradesToday = 0;
+      g_riskToday   = 0.0;
+      g_dayStart    = TimeCurrent();
+   }
+   
+   // Equity peak
+   double equity = AccountEquity();
+   if(equity > g_equityPeak) g_equityPeak = equity;
+   
+   // Drawdown check
+   double dd = (g_equityPeak - equity) / g_equityPeak * 100.0;
+   if(dd >= InpMaxDDPercent) {
+      Alert("[nexus] MAX DRAWDOWN ", DoubleToString(dd, 1), "% - TRADING PAUSED");
+      CloseAllOrders();
+      return;
+   }
+   
+   // Session filter
+   if(InpUseSessionFilter) {
+      int serverHour = Hour();
+      if(serverHour < InpTradeHourStart || serverHour > InpTradeHourEnd) return;
+   }
+   
+   // Spread check
+   if(Ask - Bid > InpMaxSpread * Point) return;
+   
+   // Get regime (API or manual)
+   double regimeConf;
+   g_currentRegime = g_api.GetRegime(Symbol(), regimeConf);
+   g_regimeConf   = regimeConf;
+   
+   // Refresh SMS
+   if(InpUseSMS && newBar) {
+      g_sms.DetectOrderBlocks();
+      g_sms.DetectFVGs();
+      g_sms.DetectLiquiditySweeps();
+   }
+   
+   // Trailing stop
+   if(InpTrailingStart > 0) {
+      g_trade.TrailStop(InpTrailingStart, InpTrailingStep);
+   }
+   
+   // Check trade limits
+   if(g_tradesToday >= InpMaxTradesPerDay) return;
+   if(g_trade.CountOpenOrders() >= InpMaxOpenTrades) return;
+   
+   // Generate signals
+   STradeSignal sig;
+   if(GenerateSignal(sig)) {
+      if(g_trade.OpenOrder(sig, sig.rationale)) {
+         g_tradesToday++;
+         g_api.LogTrade(OrderTicket(), "OPEN", sig.rationale);
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| GENERATESIGNAL - Out-of-the-box signal generation                 |
+//+------------------------------------------------------------------+
+bool GenerateSignal(STradeSignal& sig) {
+   // Reset
+   sig.tradeType   = WRONG_VALUE;
+   sig.confidence  = 0.0;
+   sig.rationale   = "";
+   sig.smsType     = "none";
+   sig.regime      = g_currentRegime;
+   
+   // Check delta absorption
+   bool absorption = InpUseDelta && g_delta.IsAbsorption();
+   
+   // Get HTF trend (H4)
+   double emaFastHTF = iMA(Symbol(), InpHTF, 20, 0, MODE_EMA, PRICE_CLOSE, 1);
+   double emaSlowHTF = iMA(Symbol(), InpHTF, 50, 0, MODE_EMA, PRICE_CLOSE, 1);
+   bool   htfBullish = emaFastHTF > emaSlowHTF;
+   bool   htfBearish = emaFastHTF < emaSlowHTF;
+   
+   // Get MTF zone (H1)
+   double emaFastMTF = iMA(Symbol(), InpMTF, 20, 0, MODE_EMA, PRICE_CLOSE, 1);
+   double emaSlowMTF = iMA(Symbol(), InpMTF, 50, 0, MODE_EMA, PRICE_CLOSE, 1);
+   double price      = Close(1);
+   double atr        = iATR(Symbol(), PERIOD_H1, 14, 1);
+   double rsi       = iRSI(Symbol(), PERIOD_H1, 14, PRICE_CLOSE, 1);
+   
+   // Get LTF confirmation (M15)
+   double emaFastLTF = iMA(Symbol(), InpLTF, 8, 0, MODE_EMA, PRICE_CLOSE, 1);
+   double emaSlowLTF = iMA(Symbol(), InpLTF, 21, 0, MODE_EMA, PRICE_CLOSE, 1);
+   double ltfBullish = emaFastLTF > emaSlowLTF;
+   double ltfBearish = emaFastLTF < emaSlowLTF;
+   
+   double slPoints = atr * 1.5 / Point;
+   double tpPoints = atr * 3.0 / Point;
+   
+   // SMS Scoring
+   double smsBullScore = 0;
+   double smsBearScore = 0;
+   
+   if(InpUseSMS) {
+      smsBullScore += g_sms.GetOBZoneScore(price, true);
+      smsBearScore += g_sms.GetOBZoneScore(price, false);
+      smsBullScore += g_sms.GetFVGZoneScore(price) * 0.5;
+      smsBearScore += g_sms.GetFVGZoneScore(price) * 0.5;
+   }
+   
+   string liqCtx = InpUseSMS ? g_sms.GetLiquidityContext() : "none";
+   
+   // ====== REGIME-ADAPTIVE SIGNAL GENERATION ======
+   // This is where we differ from martingale EAs
+   // Strategy changes based on detected regime
+   
+   switch(g_currentRegime) {
+      case REGIME_TRENDING_STRONG: {
+         // In strong trend: wait for pullback to EMA, confirm with SMS
+         // Entry only if: pullback to EMA + SMS zone + absorption
+         double emaDeviation = MathAbs(price - emaSlowMTF) / emaSlowMTF;
+         
+         if(htfBullish && ltfBullish && emaDeviation < 0.002) {
+            if(smsBullScore > 0.3 || liqCtx == "sweep_low") {
+               sig.tradeType  = ORDER_TYPE_BUY;
+               sig.sl         = slPoints * 1.0;
+               sig.tp         = tpPoints * 1.5;
+               sig.confidence = MathMin(0.5 + smsBullScore + regimeConf * 0.3, 0.95);
+               sig.rationale  = "STRONG_TREND|PULLBACK|OB_ZONE";
+               sig.smsType    = "trend_pullback";
+               sig.riskReward = (tpPoints * 1.5) / (slPoints * 1.0);
+               return true;
+            }
+         }
+         
+         if(htfBearish && ltfBearish && emaDeviation < 0.002) {
+            if(smsBearScore > 0.3 || liqCtx == "sweep_high") {
+               sig.tradeType  = ORDER_TYPE_SELL;
+               sig.sl         = slPoints * 1.0;
+               sig.tp         = tpPoints * 1.5;
+               sig.confidence = MathMin(0.5 + smsBearScore + regimeConf * 0.3, 0.95);
+               sig.rationale  = "STRONG_TREND|PULLBACK|OB_ZONE";
+               sig.smsType    = "trend_pullback";
+               sig.riskReward = (tpPoints * 1.5) / (slPoints * 1.0);
+               return true;
+            }
+         }
+         break;
+      }
+      
+      case REGIME_RANGING: {
+         // In range: trade SR bounces
+         double rangeHigh = iHighest(Symbol(), InpMTF, MODE_HIGH, 20, 1);
+         double rangeLow  = iLowest(Symbol(), InpMTF, MODE_LOW, 20, 1);
+         double rangeMid  = (rangeHigh + rangeLow) / 2;
+         
+         if(price <= rangeLow * 1.001) {
+            if(smsBullScore > 0.2 || absorption) {
+               sig.tradeType  = ORDER_TYPE_BUY;
+               sig.sl         = slPoints * 0.8;
+               sig.tp         = MathMax(tpPoints, (rangeMid - price) / Point);
+               sig.confidence = MathMin(0.4 + smsBullScore + 0.2, 0.8);
+               sig.rationale  = "RANGE|BOUNCE_LOW|SR";
+               sig.smsType    = "range_sr_bounce";
+               sig.riskReward = sig.tp / sig.sl;
+               return true;
+            }
+         }
+         
+         if(price >= rangeHigh * 0.999) {
+            if(smsBearScore > 0.2 || absorption) {
+               sig.tradeType  = ORDER_TYPE_SELL;
+               sig.sl         = slPoints * 0.8;
+               sig.tp         = MathMax(tpPoints, (price - rangeMid) / Point);
+               sig.confidence = MathMin(0.4 + smsBearScore + 0.2, 0.8);
+               sig.rationale  = "RANGE|BOUNCE_HIGH|SR";
+               sig.smsType    = "range_sr_bounce";
+               sig.riskReward = sig.tp / sig.sl;
+               return true;
+            }
+         }
+         break;
+      }
+      
+      case REGIME_VOLATILE: {
+         // Volatile market: reduce exposure, wider SL
+         if(g_regimeConf < 0.5) return false; // Not confident = skip
+         
+         double atrMult = atr * 2.5 / Point;
+         double tpMult  = atr * 5.0 / Point;
+         
+         if(absorption) {
+            sig.sl         = atrMult;
+            sig.tp         = tpMult;
+            sig.confidence = g_regimeConf * 0.5;
+            sig.riskReward = tpMult / atrMult;
+            
+            if(htfBullish) { sig.tradeType = ORDER_TYPE_BUY; sig.rationale = "VOLATILE|ABSORPTION_LONG"; sig.smsType = "liq_sweep_reversal"; }
+            else           { sig.tradeType = ORDER_TYPE_SELL; sig.rationale = "VOLATILE|ABSORPTION_SHORT"; sig.smsType = "liq_sweep_reversal"; }
+            
+            return true;
+         }
+         break;
+      }
+      
+      case REGIME_BREAKOUT: {
+         // Breakout mode: wait for retest of structure
+         // Don't chase breakout, wait pullback
+         if(price < emaSlowMTF && htfBullish) {
+            sig.tradeType  = ORDER_TYPE_BUY;
+            sig.sl         = slPoints;
+            sig.tp         = tpPoints;
+            sig.confidence = 0.5;
+            sig.rationale  = "BREAKOUT|RETEST_LONG";
+            sig.smsType    = "breakout_retest";
+            sig.riskReward = tpPoints / slPoints;
+            return true;
+         }
+         
+         if(price > emaSlowMTF && htfBearish) {
+            sig.tradeType  = ORDER_TYPE_SELL;
+            sig.sl         = slPoints;
+            sig.tp         = tpPoints;
+            sig.confidence = 0.5;
+            sig.rationale  = "BREAKOUT|RETEST_SHORT";
+            sig.smsType    = "breakout_retest";
+            sig.riskReward = tpPoints / slPoints;
+            return true;
+         }
+         break;
+      }
+      
+      default: {
+         // Unknown regime: ultra-conservative
+         if(regimeConf > 0.7 && absorption) {
+            sig.sl         = slPoints * 1.2;
+            sig.tp         = tpPoints * 0.8;
+            sig.confidence = regimeConf * 0.3;
+            sig.riskReward = 0.67;
+            
+            if(htfBullish) { sig.tradeType = ORDER_TYPE_BUY; sig.rationale = "UNKNOWN|ALPHA_ABSORPTION"; sig.smsType = "unknown_regime"; }
+            else           { sig.tradeType = ORDER_TYPE_SELL; sig.rationale = "UNKNOWN|ALPHA_ABSORPTION"; sig.smsType = "unknown_regime"; }
+            
+            return true;
+         }
+         break;
+      }
+   }
+   
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| CLOSEALLORDERS                                                    |
+//+------------------------------------------------------------------+
+void CloseAllOrders() {
+   for(int i = OrdersTotal() - 1; i >= 0; i--) {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderSymbol() != Symbol()) continue;
+      if(OrderMagicNumber() != InpMagic) continue;
+      if(OrderType() > OP_SELL) continue;
+      if(!OrderClose(OrderTicket(), OrderLots(), Bid, InpSlippage, 
+                     (OrderType() == ORDER_TYPE_BUY) ? clrRed : clrBlue))
+         Print("[Close Error] Err:", GetLastError());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| ONCHARTEVENT                                                      |
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id, const long& lparam, const double& dparam, const string& sparam) {
+   string regimeStr = "UNKNOWN";
+   switch(g_currentRegime) {
+      case REGIME_TRENDING_STRONG: regimeStr = "TRENDING_STRONG"; break;
+      case REGIME_TRENDING_WEAK:   regimeStr = "TRENDING_WEAK";   break;
+      case REGIME_RANGING:         regimeStr = "RANGING";         break;
+      case REGIME_VOLATILE:        regimeStr = "VOLATILE";        break;
+      case REGIME_LOW_VOLUME:      regimeStr = "LOW_VOLUME";      break;
+      case REGIME_BREAKOUT:        regimeStr = "BREAKOUT";        break;
+      case REGIME_UNKNOWN:         regimeStr = "UNKNOWN";         break;
+   }
+   
+   Comment(StringFormat(
+      "=== nexus-core | VicChelenge System ===\n"
+      "Regime  : %s (%.0f%% confidence)\n"
+      "Balance : %.2f  Equity: %.2f\n"
+      "Open    : %d/%d  TradesToday: %d/%d\n"
+      "SMS     : OB:%d | FVG:%d | LIQ:%d\n"
+      "Delta   : %s\n"
+      "API     : %s\n"
+      "\n"
+      "NO MARTINGALE. NO GRID.\n"
+      "PURE INSTITUTIONAL FLOW.",
+      regimeStr, g_regimeConf * 100,
+      AccountBalance(), AccountEquity(),
+      g_trade.CountOpenOrders(), InpMaxOpenTrades,
+      g_tradesToday, InpMaxTradesPerDay,
+      InpUseSMS ? g_sms.GetOBTotal() : 0,
+      InpUseSMS ? g_sms.GetFVGTotal() : 0,
+      InpUseSMS ? g_sms.GetLiqTotal() : 0,
+      InpUseDelta ? (g_delta.IsAbsorption() ? "ABSORBING" : "NORMAL") : "OFF",
+      InpUseAPI ? "CONNECTED" : "OFFLINE"
+   ));
+}
+//+------------------------------------------------------------------+
