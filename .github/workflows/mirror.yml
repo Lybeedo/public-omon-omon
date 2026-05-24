@@ -1,5 +1,4 @@
 name: Mirror to Collection
-
 on:
   push:
     branches:
@@ -32,40 +31,35 @@ jobs:
 
       - name: Mirror files with YYMMDD-HHMM prefix
         run: |
-          cd collection
           TS=$(date +%y%m%d-%H%M)
-          SOURCE="../omon-omon"
-
+          SOURCE="."
           echo "=== TIMESTAMP PREFIX: $TS ==="
-
           echo "=== Copying added/modified files ==="
-          git -C "$SOURCE" diff-tree --no-commit-id -r --name-only HEAD | sort | while IFS= read -r filepath; do
+          git diff-tree --no-commit-id -r --name-only HEAD | sort | while IFS= read -r filepath; do
             [ -z "$filepath" ] && continue
             src="$SOURCE/$filepath"
             [ ! -f "$src" ] && continue
             new_filename="${TS}_$(basename "$filepath")"
-            dest_dir="$(dirname "$filepath")"
+            dest_dir="collection/$(dirname "$filepath")"
             mkdir -p "$dest_dir"
             cp "$src" "$dest_dir/$new_filename"
             echo "  COPIED: $filepath -> $dest_dir/$new_filename"
           done
-
           echo ""
           echo "=== Copying new/untracked files ==="
-          git -C "$SOURCE" ls-files --others --exclude-standard | sort | while IFS= read -r filepath; do
+          git ls-files --others --exclude-standard | sort | while IFS= read -r filepath; do
             [ -z "$filepath" ] && continue
             src="$SOURCE/$filepath"
             [ ! -f "$src" ] && continue
             new_filename="${TS}_$(basename "$filepath")"
-            dest_dir="$(dirname "$filepath")"
+            dest_dir="collection/$(dirname "$filepath")"
             mkdir -p "$dest_dir"
             cp "$src" "$dest_dir/$new_filename"
             echo "  COPIED: $filepath -> $dest_dir/$new_filename"
           done
-
           echo ""
           echo "=== Deletions: SKIPPED (preserved in collection) ==="
-          DELETED=$(git -C "$SOURCE" diff --name-status --diff-filter=D HEAD | grep -v '^$' | cut -f2)
+          DELETED=$(git diff --name-status --diff-filter=D HEAD | grep -v '^$' | cut -f2)
           [ -n "$DELETED" ] && echo "$DELETED" || echo "  (none)"
 
       - name: Commit and push to public-collection
