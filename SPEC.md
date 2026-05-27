@@ -297,6 +297,206 @@ BSTATE_IDLE → BSTATE_BUILD_BOX → BSTATE_READY
 
 ---
 
+### 2.7 GoldTradePro EA
+**File:** `MT4/Experts/GoldTradePro_EA.mq4`, `MT5/Experts/GoldTradePro_EA.mq5`
+**Platform:** MT4 & MT5 (dual version)
+**Strategi:** Multi-Strategy Fractal Breakout untuk XAUUSD/GOLD
+
+#### Filosofi
+EA ini dirancang khusus untuk trading **Gold (XAUUSD)** dengan menganalisis fractal high/low pada daily timeframe sebagai sinyal utama, dikonfirmasi dengan SMA(20) untuk trend direction. Setiap strategi memiliki parameter SL/TP/Trail yang berbeda untuk menangkap berbagai kondisi pasar.
+
+#### Arsitektur
+```
+GoldTradePro EA
+├── 8 Strategi Independen (A-H)
+│   ├── Each punya Magic Number sendiri
+│   ├── Each punya parameter SL/TP/Trail unik
+│   └── Can be enabled/disabled via input
+├── Signal Engine
+│   ├── Fractal Detection (iFractals)
+│   ├── SMA Trend Confirmation
+│   └── Breakout Confirmation
+├── Order Management
+│   ├── Trailing SL
+│   ├── Break-Even
+│   ├── Zone Recovery
+│   └── Virtual Expiration
+└── Risk Management
+    ├── Manual Lot
+    ├── RPT (Risk Per Trade %)
+    └── Lots Per Balance
+```
+
+#### Strategi Detail
+
+##### Strategy A - Conservative Daily Breakout
+| Parameter | Value | Deskripsi |
+|-----------|-------|-----------|
+| Magic Offset | 0 | Offset dari base magic |
+| Signal TF | D1 | Daily sebagai timeframe sinyal |
+| SL (points) | 150.0 | ~$15/lot untuk gold |
+| TP (points) | 680.0 | ~$68/lot |
+| Trail Start | 50.0 | Mulai trailing di 50 points profit |
+| Trail Step | 30.0 | Step trailing 30 points |
+| Expiry | 408h (17d) | Virtual expiry 17 hari |
+
+##### Strategy B - Aggressive Breakout
+| Parameter | Value | Deskripsi |
+|-----------|-------|-----------|
+| Magic Offset | 1 | |
+| Signal TF | D1 | |
+| SL (points) | 400.0 | Wide SL untuk volatilitas tinggi |
+| TP (points) | 380.0 | Moderate TP |
+| Trail Start | 80.0 | |
+| Trail Step | 40.0 | |
+| Expiry | 168h (7d) | |
+
+##### Strategy C - Swing
+| Parameter | Value | Deskripsi |
+|-----------|-------|-----------|
+| Magic Offset | 2 | |
+| Signal TF | D1 | |
+| Fractal Period | 2 | Check fractal 2 candle ago |
+| SL (points) | 900.0 | Wide SL untuk swing |
+| TP (points) | 980.0 | |
+| Expiry | 408h (17d) | |
+
+##### Strategy D - Trend Following
+| Parameter | Value | Deskripsi |
+|-----------|-------|-----------|
+| Magic Offset | 3 | |
+| SL (points) | 900.0 | |
+| TP (points) | 680.0 | |
+| Expiry | 48h (2d) | Short expiry untuk cepat cut |
+
+##### Strategy E - Scalping
+| Parameter | Value | Deskripsi |
+|-----------|-------|-----------|
+| Magic Offset | 4 | |
+| Fractal Period | 2 | |
+| SL (points) | 550.0 | |
+| TP (points) | 480.0 | |
+| Expiry | 480h (20d) | Long expiry |
+
+##### Strategy F - Quick Breakout
+| Parameter | Value | Deskripsi |
+|-----------|-------|-----------|
+| Magic Offset | 5 | |
+| SL (points) | 700.0 | |
+| TP (points) | 30.0 | Quick TP (early exit) |
+| Expiry | 384h (16d) | |
+
+##### Strategy G - Reversal
+| Parameter | Value | Deskripsi |
+|-----------|-------|-----------|
+| Magic Offset | 6 | |
+| SL (points) | 150.0 | Tight SL |
+| TP (points) | 280.0 | |
+| Expiry | 240h (10d) | |
+
+##### Strategy H - Multi-Timeframe
+| Parameter | Value | Deskripsi |
+|-----------|-------|-----------|
+| Magic Offset | 7 | |
+| SL (points) | 250.0 | |
+| TP (points) | 980.0 | Large TP |
+| Expiry | 432h (18d) | |
+
+#### Input Parameters
+
+| Group | Parameter | Default | Deskripsi |
+|-------|-----------|---------|-----------|
+| General | Gen_MagicNumber | 1000 | Base magic number |
+| General | Gen_Comment | "Gold Trade Pro v2" | Order comment |
+| General | Gen_ShowInfoPanel | true | Show dashboard |
+| Strategy | Strat_EnableA-H | true | Enable/disable masing-masing strategi |
+| Filters | Filter_MaxSpread | 500 | Max spread (points) |
+| Filters | Filter_UseVirtualExpiry | true | Virtual order expiry |
+| MM | MM_RiskMode | 0 | 0=Manual, 1=RPT, 2=LotsPerBalance |
+| MM | MM_StartLots | 0.01 | Starting lot size |
+| MM | MM_RiskPerTrade | 2.0 | Risk % (untuk mode RPT) |
+| MM | MM_LotPerBalanceStep | 600 | Balance per lot step |
+| Trade Filter | Filter_HighLowBreakout | true | Enable breakout filter |
+| Trade Filter | Filter_Reversal | false | Close on reversal signal |
+| Trade Filter | Filter_MATrend | false | MA trend confirmation |
+| Trade Filter | Filter_Volatility | true | ATR volatility filter |
+| Trailing | Trail_Enable | false | Enable trailing SL |
+| Trailing | Trail_StartPoints | 10.0 | Activate trailing |
+| Trailing | Trail_StepPoints | 10.0 | Trail step size |
+| Zone Recovery | ZR_Enable | false | Enable zone recovery |
+| Zone Recovery | ZR_LotMultiplier | 1.0 | Lot multiplier for recovery |
+| Trading Hours | TH_Enable | false | Enable time filter |
+| Trading Hours | TH_StartDay/Hour | 0/0 | Start day & hour |
+| Trading Hours | TH_EndDay/Hour | 6/24 | End day & hour |
+
+#### Signal Logic (Buy Example)
+
+```
+1. Price > SMA(20) on D1
+2. Fractal High[1] > High[1] + buffer
+3. Fractal High[1] > Fractal High[2] (new high)
+4. SMA[1] > SMA[2] (MA rising)
+5. No existing open positions for this strategy
+6. Spread <= MaxSpread
+7. Within trading hours
+→ EXECUTE BUY at Ask
+```
+
+#### Signal Logic (Sell Example)
+
+```
+1. Price < SMA(20) on D1
+2. Fractal Low[1] < Low[1] - buffer
+3. Fractal Low[1] < Fractal Low[2] (new low)
+4. SMA[1] < SMA[2] (MA falling)
+5. No existing open positions for this strategy
+6. Spread <= MaxSpread
+7. Within trading hours
+→ EXECUTE SELL at Bid
+```
+
+#### Order Flow
+
+```
+OnTick()
+├── Check new bar (D1 timeframe)
+├── For each enabled strategy (A-H)
+│   ├── UpdateStrategyState() — get fractal, MA, HL data
+│   ├── CheckSignalConditions() — evaluate buy/sell
+│   ├── ExecuteBuy/Sell() — open order if signal valid
+│   └── ManageOrders() — trailing, BE, close, expiry
+└── UpdateInfoPanel()
+```
+
+#### Position Management
+
+| Feature | Logic |
+|---------|-------|
+| **Trailing SL** | Profit >= TrailStart → SL = CurrentPrice - TrailStep |
+| **Break-Even** | Profit >= BEProfit → SL = EntryPrice + BEOffset |
+| **Zone Recovery** | Price against position by 50% SL → add recovery lot |
+| **Virtual Expiry** | Position > ExpiryHours → force close |
+| **Reversal Close** | Opposite signal while position open → close |
+
+#### Notes untuk Backtesting
+
+- **Timeframe:** EA berjalan di timeframe berapapun, tapi check D1 bar untuk sinyal
+- **Symbol:** Optimized untuk XAUUSD/GOLD (auto-detect)
+- **Spread:** Default 500 points (= 50 pips untuk 5-digit broker)
+- **Point:** Auto-adjust untuk 3/5 digit broker (gold = 0.01)
+- **Commission:** Perlu setting komisi untuk gold (biasanya $5-10/lot)
+- **Slippage:** Default 3 points (sesuaikan dengan broker)
+
+#### Known Issues / Limitations
+
+- Setiap strategi buka MAX 1 posisi per instance
+- Zone Recovery bisa buka posisi tambahan di luar limit
+- Virtual Expiry hanya untuk manage existing, bukan cancel pending
+- Tidak ada news filter — perlu tambahkan manual
+- Backtest dengan spread tinggi akan trigger skip
+
+---
+
 ## 9. Version History
 
 | Versi | Tanggal | Perubahan |
@@ -304,6 +504,7 @@ BSTATE_IDLE → BSTATE_BUILD_BOX → BSTATE_READY
 | v1.00 | 2025-05-20 | Initial commit — JavaneseTrader + SMC_Lee EAs |
 | v1.01 | 2025-05-20 | Folder restructure: MQ5→MT5, MQL4→MT4, guppy_mma merged |
 | v1.02 | 2025-05-23 | GBPUSD_BreakoutBox_EA — Deni Dollar 4-candle HL Box + Switch method |
+| v2.00 | 2025-05-27 | GoldTradePro EA — Clean MT4/MT5 port dari obfuscated source, 8 strategi (A-H) |
 
 ---
 
