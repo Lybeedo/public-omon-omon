@@ -1,0 +1,5 @@
+fastapi==0.115.0
+uvicorn==0.30.0
+pydantic==2.9.0
+deap==1.4.1
+numpy==1.26.0

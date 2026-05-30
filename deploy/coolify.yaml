@@ -1,0 +1,74 @@
+# Coolify Deployment Configuration
+# =================================
+# VicChelenge System - Pure AI Trading
+# NO MARTINGALE. NO GRID.
+
+version: 1
+
+resources:
+  - name: nexus-api
+    type: application
+    docker_compose: |
+      nexus-api:
+        build: ../nexus-api
+        port: 8000
+        environment:
+          - NEXUS_DB=/data/nexus.db
+        volumes:
+          - nexus-data:/data
+        health_check:
+          path: /health
+          interval: 30s
+
+  - name: nexus-regime
+    type: application
+    docker_compose: |
+      nexus-regime:
+        build: ../nexus-regime
+        port: 8001
+        health_check:
+          path: /health
+          interval: 30s
+
+  - name: nexus-llm
+    type: application
+    docker_compose: |
+      nexus-llm:
+        build: ../nexus-llm
+        port: 8002
+        environment:
+          - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+        health_check:
+          path: /health
+          interval: 30s
+
+  - name: nexus-optimizer
+    type: application
+    docker_compose: |
+      nexus-optimizer:
+        build: ../nexus-optimizer
+        port: 8003
+        health_check:
+          path: /health
+          interval: 60s
+
+  - name: nexus-dashboard
+    type: application
+    docker_compose: |
+      nexus-dashboard:
+        image: nginx:alpine
+        port: 3000
+        volumes:
+          - ./nexus-dashboard:/usr/share/nginx/html:ro
+
+  - name: nexus-caddy
+    type: application
+    docker_compose: |
+      caddy:
+        image: caddy:alpine
+        ports:
+          - "80:80"
+          - "443:443"
+        volumes:
+          - ./Caddyfile:/etc/caddy/Caddyfile:ro
+          - caddy-data:/data
