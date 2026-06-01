@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY nexus-optimizer/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY nexus-optimizer/nexus_optimizer.py .
+
+EXPOSE 8003
+
+HEALTHCHECK --interval=60s --timeout=10s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"
+
+CMD ["python", "nexus_optimizer.py"]

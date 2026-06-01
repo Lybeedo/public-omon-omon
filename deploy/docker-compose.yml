@@ -13,7 +13,9 @@ services:
   # nexus-api: Central Backend
   # ================================================
   nexus-api:
-    image: python:3.11-slim
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.nexus-api
     container_name: nexus-api
     restart: unless-stopped
     ports:
@@ -23,10 +25,8 @@ services:
       - TZ=UTC
     volumes:
       - nexus-data:/data
-    working_dir: /app
-    command: bash -c "pip install fastapi uvicorn pydantic && python nexus_api.py"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -37,17 +37,17 @@ services:
   # nexus-regime: Market Regime Detection
   # ================================================
   nexus-regime:
-    image: python:3.11-slim
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.nexus-regime
     container_name: nexus-regime
     restart: unless-stopped
     ports:
       - "8001:8001"
     environment:
       - TZ=UTC
-    working_dir: /app
-    command: bash -c "pip install fastapi uvicorn pydantic numpy && python nexus_regime.py"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -58,18 +58,18 @@ services:
   # nexus-llm: AI Analysis Engine (OpenRouter)
   # ================================================
   nexus-llm:
-    image: python:3.11-slim
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.nexus-llm
     container_name: nexus-llm
     restart: unless-stopped
     ports:
       - "8002:8002"
     environment:
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - TZ=UTC
-    working_dir: /app
-    command: bash -c "pip install fastapi uvicorn pydantic httpx && python nexus_llm.py"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -80,17 +80,17 @@ services:
   # nexus-optimizer: Genetic Algorithm Engine
   # ================================================
   nexus-optimizer:
-    image: python:3.11-slim
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.nexus-optimizer
     container_name: nexus-optimizer
     restart: unless-stopped
     ports:
       - "8003:8003"
     environment:
       - TZ=UTC
-    working_dir: /app
-    command: bash -c "pip install fastapi uvicorn pydantic deap numpy && python nexus_optimizer.py"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
       interval: 60s
       timeout: 10s
       retries: 3
@@ -111,7 +111,7 @@ services:
     environment:
       - TZ=UTC
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 5s
       retries: 3

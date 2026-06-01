@@ -288,7 +288,7 @@ class GeneticOptimizer:
                     # Crossover
                     p1 = self.select_tournament(self.population)
                     p2 = self.select_tournament(self.population)
-                    c1, c2 = p1.crossover(p2) if hasattr(p1, 'crossover') else (p1.clone(), p2.clone())
+                    c1, c2 = p1.mate(p2)
                     offspring.extend([c1, c2])
                 else:
                     # Mutation
