@@ -338,15 +338,20 @@ int OnInit()
    VolatilityPercentageLimit = VolatilityPercentageLimit / 100.0 + 1.0;
    VolatilityMultiplier /= 10.0;
    ArrayInitialize(Zda_436, 0);
-   VolatilityLimit *= m_symbol.Point();
-   Commission = f0_12(Commission * m_symbol.Point());
-   Zd_464 *= m_symbol.Point();
-   AddPriceGap *= m_symbol.Point();
+   // FIX XAUUSD: 5-digit brokers report Point=0.00001 but broker "points" are 0.01
+   double pointMul = 1.0;
+   if (StringFind(Symbol(), "XAU") >= 0 || StringFind(Symbol(), "GOLD") >= 0)
+      pointMul = 1000.0;
+   double realPoint = m_symbol.Point() * pointMul;
+   VolatilityLimit *= realPoint;
+   Commission = f0_12(Commission * realPoint);
+   Zd_464 *= realPoint;
+   AddPriceGap *= realPoint;
 
     // FIX #3: Ensure stop gap meets broker minimum stop distance plus one extra point of buffer
-    double brokerStopLevel = (double)SymbolInfoInteger(Symbol(), SYMBOL_TRADE_STOPS_LEVEL) * m_symbol.Point();
-    if (brokerStopLevel > 0 && Zd_464 < brokerStopLevel + m_symbol.Point())
-       Zd_464 = brokerStopLevel + m_symbol.Point();
+    double brokerStopLevel = (double)SymbolInfoInteger(Symbol(), SYMBOL_TRADE_STOPS_LEVEL) * realPoint;
+    if (brokerStopLevel > 0 && Zd_464 < brokerStopLevel + realPoint)
+       Zd_464 = brokerStopLevel + realPoint;
     if (Verbose)
     {
        Print("Init: EXEMODE=" + IntegerToString(SymbolInfoInteger(Symbol(), SYMBOL_TRADE_EXEMODE)) +
@@ -672,14 +677,16 @@ void f0_9()
    // so enforce a hard floor of 50 points.
    double apiStopLevel = (double)SymbolInfoInteger(Symbol(), SYMBOL_TRADE_STOPS_LEVEL);
    double stopLvl = (apiStopLevel <= 0) ? 50.0 : apiStopLevel;
-   double stopLvlPrice = stopLvl * m_symbol.Point();
+   double pointMul = 1.0;
+   if (StringFind(Symbol(), "XAU") >= 0 || StringFind(Symbol(), "GOLD") >= 0)
+      pointMul = 1000.0;
+   double realPoint = m_symbol.Point() * pointMul;
+   double stopLvlPrice = stopLvl * realPoint;
    double safeGap = MathMax(Zd_464, stopLvlPrice);
 
-   double Md_112 = ask_96  + safeGap;   // BUY_STOP fallback price
+   double point = realPoint;
    double Md_120 = bid_104 - safeGap;   // SELL_STOP fallback price
    string event;
-
-   double point = m_symbol.Point();
 
    // FIX #4: Spread check — compare raw point-based spread against MaxSpread in points,
    // not multiplied by point again (avoids double-scaling on 5-digit brokers).
@@ -1218,7 +1225,10 @@ bool LockProfit(int TiketOrder, int TargetPoints, int LockedPoints)
 
    double ask    = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
    double bid    = SymbolInfoDouble(Symbol(), SYMBOL_BID);
-   double point  = m_symbol.Point();
+   double pointMul = 1.0;
+   if (StringFind(Symbol(), "XAU") >= 0 || StringFind(Symbol(), "GOLD") >= 0)
+      pointMul = 1000.0;
+   double point  = m_symbol.Point() * pointMul;
    int    digits = (int)m_symbol.Digits();
 
    double CurrentSL = 0;
@@ -1278,7 +1288,10 @@ bool RZ_TrailingStop(int TiketOrder, int JumlahPoin, int Step = 1,
 
    if (!PositionSelectByTicket((ulong)TiketOrder)) return false;
 
-   double point  = m_symbol.Point();
+   double pointMul = 1.0;
+   if (StringFind(Symbol(), "XAU") >= 0 || StringFind(Symbol(), "GOLD") >= 0)
+      pointMul = 1000.0;
+   double point  = m_symbol.Point() * pointMul;
    int    digits = (int)m_symbol.Digits();
    double ask    = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
    double bid    = SymbolInfoDouble(Symbol(), SYMBOL_BID);
@@ -1389,7 +1402,10 @@ bool SetSLnTP()
       ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)m_position.PositionType();
       if (posType != POSITION_TYPE_BUY && posType != POSITION_TYPE_SELL) continue;
 
-      double point      = m_symbol.Point();
+      double pointMul = 1.0;
+      if (StringFind(Symbol(), "XAU") >= 0 || StringFind(Symbol(), "GOLD") >= 0)
+         pointMul = 1000.0;
+      double point      = m_symbol.Point() * pointMul;
       double minstoplevel = m_symbol.StopsLevel();
       double ask        = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
       double bid        = SymbolInfoDouble(Symbol(), SYMBOL_BID);
