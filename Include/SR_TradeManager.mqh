@@ -94,16 +94,25 @@ private:
   };
 
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//|  P_ format conversion for XAUUSDm (5-digit price)                 |
+//|  EA input is in "points" where 1 pip = 10 points                 |
+//|  XAUUSD: Point = 0.00001 → 1 P_point = 0.001 price (100 points) |
+//+------------------------------------------------------------------+
 double g_pointsToPrice(double points)
   {
-   // P_ format: points = P_*Point*10, so 1 pip = 10 points
-   return points * Point * 10.0;
+   // For 5-digit XAUUSD: 1 pip = 10 points, 1 P_point = Point * 1000
+   // e.g. 150 points SL = 150 * 0.00001 * 1000 = 0.15 price = 1500 broker points
+   return points * Point * 1000.0;
   }
 
 //+------------------------------------------------------------------+
 double g_priceToPoints(double price)
   {
-   return price / Point / 10.0;
+   // Reverse of g_pointsToPrice: convert price difference back to points
+   // price / (Point * 1000.0) = points
+   // e.g. 0.15 price / 0.00001 / 1000 = 15000 points  
+   return price / Point / 1000.0;
   }
 
 //+------------------------------------------------------------------+
@@ -268,19 +277,72 @@ bool CSR_TradeManager::OpenTrade(ENUM_ZONE_TYPE zoneType,
   }
 
 //+------------------------------------------------------------------+
+//|  OpenPosition — uses pending SELL STOP for sell entries          |
+//|  SELL: entry below market, SL above entry, TP below entry       |
+//+------------------------------------------------------------------+
 bool CSR_TradeManager::OpenPosition(ENUM_ZONE_TYPE zoneType, double sl, double tp,
                                     double lot, int zoneIdx,
                                     ENUM_POSITION_TYPE posType,
                                     STradeState &stateOut)
   {
-   ENUM_ORDER_TYPE op = (posType == POSITION_TYPE_BUY) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
    string comment = m_commentPrefix + " Z" + IntegerToString(zoneIdx);
+
+   // Normalize all prices to symbol digits
+   sl = NormalizeDouble(sl, _Digits);
+   tp = NormalizeDouble(tp, _Digits);
+   double entryNorm = (posType == POSITION_TYPE_BUY)
+                      ? SymbolInfoDouble(_Symbol, SYMBOL_ASK)
+                      : SymbolInfoDouble(_Symbol, SYMBOL_BID);
+
+   // Enforce minimum stop distance from broker
+   long stopLevel = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   double freezeLevel = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_FREEZE_LEVEL);
+
+   if(posType == POSITION_TYPE_SELL)
+     {
+      double market = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+      double minSL = market + stopLevel * Point;
+      if(sl <= market)
+        {
+         // SL must be above market by at least stopLevel
+         sl = NormalizeDouble(minSL + Point * 5, _Digits);
+        }
+      // TP must be below entry for sell
+      if(tp >= entryNorm) tp = NormalizeDouble(entryNorm - Point * 50, _Digits);
+     }
+   else  // POSITION_TYPE_BUY
+     {
+      double market = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+      double minSL = market - stopLevel * Point;
+      if(sl >= market)
+        {
+         sl = NormalizeDouble(minSL - Point * 5, _Digits);
+        }
+      // TP must be above entry for buy
+      if(tp <= entryNorm) tp = NormalizeDouble(entryNorm + Point * 50, _Digits);
+     }
+
+   // Re-check RR after adjustments
+   double adjRR = CalcRiskReward(entryNorm, sl, tp);
+   if(adjRR < m_minRR)
+     {
+      if(LogLevel >= 1)
+         PrintFormat("[TRADE] Adjusted SL/TP violates min RR (%.2f < %.2f)", adjRR, m_minRR);
+      return false;
+     }
+
+   sl = NormalizeDouble(sl, _Digits);
+   tp = NormalizeDouble(tp, _Digits);
 
    bool result;
    if(posType == POSITION_TYPE_BUY)
-      result = m_trade.Buy(lot, _Symbol, 0.0, sl, tp, comment);
+      result = m_trade.Buy(lot, _Symbol, entryNorm, sl, tp, comment);
    else
-      result = m_trade.Sell(lot, _Symbol, 0.0, sl, tp, comment);
+     {
+      // Use SELL STOP pending order for sell entries
+      double price = NormalizeDouble(entryNorm - Point * 30, _Digits);  // stop price below market
+      result = m_trade.SellStop(lot, price, _Symbol, sl, tp, ORDER_TIME_GTC, 0, comment);
+     }
 
    if(result)
      {
@@ -296,7 +358,11 @@ bool CSR_TradeManager::OpenPosition(ENUM_ZONE_TYPE zoneType, double sl, double t
    else
      {
       if(LogLevel >= 1)
-         PrintFormat("[TRADE] OPEN FAILED, err=%d", GetLastError());
+         PrintFormat("[TRADE] OPEN FAILED err=%d Ask=%.5f Bid=%.5f SL=%.5f TP=%.5f stopLvl=%d",
+                     GetLastError(),
+                     SymbolInfoDouble(_Symbol, SYMBOL_ASK),
+                     SymbolInfoDouble(_Symbol, SYMBOL_BID),
+                     sl, tp, stopLevel);
      }
 
    (void)zoneType;
