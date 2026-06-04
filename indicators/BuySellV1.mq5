@@ -34,6 +34,11 @@ input group "=== Settings ==="
 input bool  InpRepaint = true;            // Repaint Mode
 input bool  InpExtend  = false;           // Extend Lines (reserved)
 
+input group "=== Dashboard ==="
+input bool  InpShowDashboard = true;      // Show Telegram Dashboard
+input color InpDashBgColor   = clrBlue;    // Dashboard BG Color
+input color InpDashTextColor = clrWhite;   // Dashboard Text Color
+
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║  GLOBALS                                                         ║
 // ╚══════════════════════════════════════════════════════════════════╝
@@ -213,6 +218,36 @@ void ReplaceLastPivot(int bar, datetime t, double price, int dir)
 }
 
 //+------------------------------------------------------------------+
+//| Create Dashboard Table (Pine table.new equivalent)              |
+//+------------------------------------------------------------------+
+void CreateDashboard()
+{
+   if(!InpShowDashboard) return;
+   
+   string name = g_prefix + "Dashboard";
+   int    chartW = (int)ChartGetInteger(ChartID(), CHART_WIDTH_IN_PIXELS);
+   int    x = (chartW > 300) ? (chartW / 2 - 150) : 10;
+   int    y = 10;
+   int    w = 300;
+   int    h = 30;
+   
+   if(!ObjectCreate(ChartID(), name, OBJ_EDIT, 0, 0, 0))
+      return;
+   
+   ObjectSetInteger(ChartID(), name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(ChartID(), name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(ChartID(), name, OBJPROP_XSIZE, w);
+   ObjectSetInteger(ChartID(), name, OBJPROP_YSIZE, h);
+   ObjectSetInteger(ChartID(), name, OBJPROP_BGCOLOR,  InpDashBgColor);
+   ObjectSetInteger(ChartID(), name, OBJPROP_COLOR,    InpDashTextColor);
+   ObjectSetInteger(ChartID(), name, OBJPROP_READONLY,   true);
+   ObjectSetInteger(ChartID(), name, OBJPROP_ALIGN,      ALIGN_CENTER);
+   ObjectSetInteger(ChartID(), name, OBJPROP_FONTSIZE,   10);
+   ObjectSetString (ChartID(), name, OBJPROP_FONT,       "Arial Bold");
+   ObjectSetString (ChartID(), name, OBJPROP_TEXT,       "Join Telegram @simpleforextools");
+}
+
+//+------------------------------------------------------------------+
 //| Standard Event Functions                                        |
 //+------------------------------------------------------------------+
 int OnInit()
@@ -224,6 +259,7 @@ int OnInit()
    g_lastAlertBar = -1;
    g_repaintObjName = "";
    DeleteAllObjects();
+   CreateDashboard();
    return(INIT_SUCCEEDED);
 }
 
