@@ -2,10 +2,10 @@
 //|                                               BuySellV1.mq5      |
 //|                        Converted from TradingView Pine Script v6   |
 //|                          Source: Buy Sell V1 by SimpleForexTools |
-//|                    https://t.me/simpleforextools                   |
+//|                    https://t.me/cuancux                   |
 //+------------------------------------------------------------------+
 #property copyright "SimpleForexTools | MQL5 Conversion"
-#property link      "https://t.me/simpleforextools"
+#property link      "https://t.me/cuancux"
 #property version   "1.00"
 #property indicator_chart_window
 #property indicator_buffers 0
@@ -244,7 +244,7 @@ void CreateDashboard()
    ObjectSetInteger(ChartID(), name, OBJPROP_ALIGN,      ALIGN_CENTER);
    ObjectSetInteger(ChartID(), name, OBJPROP_FONTSIZE,   10);
    ObjectSetString (ChartID(), name, OBJPROP_FONT,       "Arial Bold");
-   ObjectSetString (ChartID(), name, OBJPROP_TEXT,       "Join Telegram @simpleforextools");
+   ObjectSetString (ChartID(), name, OBJPROP_TEXT,       "Join Telegram @cuancux");
 }
 
 //+------------------------------------------------------------------+

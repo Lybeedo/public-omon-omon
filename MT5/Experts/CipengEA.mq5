@@ -1,11 +1,11 @@
 //+------------------------------------------------------------------+
 //|                                                   CipengEA.mq5    |
 //|                              Trend Following — Sell on Rally       |
-//|                        https://t.me/simpleforextools              |
+//|                        https://t.me/cuancux              |
 //|              Built by: Cipeng Strategy × SimpleForexTools         |
 //+------------------------------------------------------------------+
 #property copyright "Cipeng | SimpleForexTools"
-#property link      "https://t.me/simpleforextools"
+#property link      "https://t.me/cuancux"
 #property version   "1.00"
 #property strict
 
