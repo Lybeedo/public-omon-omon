@@ -601,7 +601,684 @@ public:
 };
 
 //+------------------------------------------------------------------+
-//| GLOBAL INSTANCES                                                 |
+//| CAUSAL-EFFECT MARKET DYNAMICS (CEMD) ENGINE                       |
+//| Framework: "Cause = Base + Momentum, Effect = Respect/Break"       |
+//|           Energy Transfer, Consumption, Return Behavior             |
+//|           Target Efficiency, Clean Room, MTF Confluence            |
+//+------------------------------------------------------------------+
+
+// Cause regime classification — extends beyond market regime
+enum ENUM_CAUSE_REGIME {
+   CAUSE_STRONG_TREND,    // displacement besar, return lambat
+   CAUSE_WEAK_TREND,      // displacement kecil, return cepat
+   CAUSE_RANGE_BOUND,     // cause dekat SR, balancing
+   CAUSE_CONSUMPTION,     // cause sering di-test, melemah
+   CAUSE_BREAKOUT_BUILD,  // compression menuju area
+   CAUSE_ENERGY_TRANSFER, // jauh dari cause, energi habis
+   CAUSE_EFFICIENCY_HIGH, // pergerakan searah, clean room
+   CAUSE_EFFICIENCY_LOW,  // bolak-balik, obstacle banyak
+   CAUSE_UNKNOWN
+};
+
+// Base candle types — penyebab (cause) dari pergerakan harga
+enum ENUM_BASE_TYPE {
+   BASE_DOJI,          // doji candle
+   BASE_PINBAR,        // pinbar rejection
+   BASE_SHADOW,        // shadow panjang
+   BASE_SMALL_BODY,    // small candle (consolidation)
+   BASE_HIDDEN_SHADOW, // hidden shadow (wick kecil)
+   BASE_MOMENTUM,      // momentum candle (displacement)
+   BASE_UNKNOWN
+};
+
+struct SCausalZone {
+   double    zoneHigh;       // Upper boundary cause zone
+   double    zoneLow;        // Lower boundary cause zone
+   double    baseOpen;       // Open candle base
+   double    baseClose;      // Close candle base
+   double    momentumSize;   // Displacement size (pts)
+   double    energyLevel;    // 0.0-1.0 (fresh=1.0, consumed=0.0)
+   int       consumptionCount; // Berapa kali di-test
+   int       baseType;       // ENUM_BASE_TYPE
+   datetime  createdTime;    // Waktu cause terbentuk
+   datetime  lastTested;     // Waktu terakhir di-test
+   bool      isBullish;      // True if bullish cause
+   bool      isActive;       // True if still valid
+   string    timeframe;      // "H4", "H1", "M15", "M5"
+   double    zoneScore;      // Quality score (base + momentum)
+};
+
+struct SReturnBehavior {
+   datetime  startTime;
+   double    startPrice;
+   double    currentPrice;
+   double    velocity;       // pts per minute
+   double    distance;       // distance from cause zone
+   bool      isReturning;    // True if price returning to cause
+   int       ticksCount;     // Number of ticks during return
+   double    pathDeviation;  // Deviation from straight line
+};
+
+struct STargetEfficiency {
+   double    targetHigh;     // Nearest obstacle (high)
+   double    targetLow;      // Nearest obstacle (low)
+   double    cleanRoomBuy;   // Distance to target high
+   double    cleanRoomSell;  // Distance to target low
+   double    compressionRatio; // Target narrowing ratio
+   double    obstacleCount;  // Number of obstacles in path
+   bool      isEfficient;    // True if clean room > threshold
+};
+
+//+------------------------------------------------------------------+
+//| CCausalZoneDetector — Detect Cause Zones (Base + Momentum)         |
+//+------------------------------------------------------------------+
+class CCausalZoneDetector {
+private:
+   string    m_sym;
+   SCausalZone m_zones[];
+   ENUM_TIMEFRAMES m_tf;
+   int       m_maxZones;
+   int       m_lookback;
+   
+   // Detect base candle type
+   ENUM_BASE_TYPE DetectBaseType(int bar) {
+      double o = iOpen(m_sym, m_tf, bar);
+      double c = iClose(m_sym, m_tf, bar);
+      double h = iHigh(m_sym, m_tf, bar);
+      double l = iLow(m_sym, m_tf, bar);
+      double body = MathAbs(c - o);
+      double range = h - l;
+      double upperWick = h - MathMax(o, c);
+      double lowerWick = MathMin(o, c) - l;
+      
+      // Doji: body < 10% of range
+      if(body < range * 0.1) return BASE_DOJI;
+      // Pinbar: wick > 2x body
+      if(upperWick > body * 2.0 || lowerWick > body * 2.0) return BASE_PINBAR;
+      // Shadow panjang: wick > 70% of range
+      if((upperWick + lowerWick) > range * 0.7) return BASE_SHADOW;
+      // Small body: body < 30% of range
+      if(body < range * 0.3) return BASE_SMALL_BODY;
+      // Hidden shadow: small wick but strong close
+      if(upperWick < range * 0.1 && lowerWick < range * 0.1 && body > range * 0.6) return BASE_HIDDEN_SHADOW;
+      // Momentum: body > 70% of range
+      if(body > range * 0.7) return BASE_MOMENTUM;
+      
+      return BASE_UNKNOWN;
+   }
+   
+   // Calculate momentum size (displacement)
+   double CalcMomentumSize(int bar, bool isBullish) {
+      double displacement = 0;
+      for(int i = 1; i <= 3; i++) {
+         double c0 = iClose(m_sym, m_tf, bar);
+         double c1 = iClose(m_sym, m_tf, bar - i);
+         if(isBullish && c1 > c0) displacement += (c1 - c0);
+         if(!isBullish && c1 < c0) displacement += (c0 - c1);
+      }
+      return displacement;
+   }
+   
+   // Score base quality
+   double ScoreBaseQuality(ENUM_BASE_TYPE type) {
+      switch(type) {
+         case BASE_DOJI:        return 0.8;
+         case BASE_PINBAR:    return 0.9;
+         case BASE_SHADOW:    return 0.7;
+         case BASE_SMALL_BODY: return 0.6;
+         case BASE_HIDDEN_SHADOW: return 0.75;
+         case BASE_MOMENTUM:  return 0.85;
+         default: return 0.5;
+      }
+   }
+   
+   // Score momentum quality
+   double ScoreMomentum(double momentumPts, double atr) {
+      if(atr <= 0) return 0.5;
+      double ratio = momentumPts / atr;
+      if(ratio > 2.0) return 1.0;
+      if(ratio > 1.5) return 0.8;
+      if(ratio > 1.0) return 0.6;
+      return 0.3;
+   }
+
+public:
+   CCausalZoneDetector(string sym, ENUM_TIMEFRAMES tf, int maxZones, int lookback) {
+      m_sym = sym;
+      m_tf = tf;
+      m_maxZones = maxZones;
+      m_lookback = lookback;
+   }
+   
+   // Detect all cause zones
+   void DetectZones() {
+      ArrayResize(m_zones, 0);
+      double atr = iATR(m_sym, m_tf, 14, 1);
+      
+      for(int i = m_lookback; i >= 1; i--) {
+         ENUM_BASE_TYPE baseType = DetectBaseType(i);
+         if(baseType == BASE_UNKNOWN) continue;
+         
+         double o = iOpen(m_sym, m_tf, i);
+         double c = iClose(m_sym, m_tf, i);
+         double h = iHigh(m_sym, m_tf, i);
+         double l = iLow(m_sym, m_tf, i);
+         bool isBullish = (c > o);
+         
+         double momentum = CalcMomentumSize(i, isBullish);
+         double baseScore = ScoreBaseQuality(baseType);
+         double momScore = ScoreMomentum(momentum, atr);
+         double zoneScore = (baseScore * 0.4 + momScore * 0.6);
+         
+         // Only create cause zone if score is good enough
+         if(zoneScore < 0.5) continue;
+         
+         int idx = ArraySize(m_zones);
+         ArrayResize(m_zones, idx + 1);
+         
+         m_zones[idx].zoneHigh = h;
+         m_zones[idx].zoneLow = l;
+         m_zones[idx].baseOpen = o;
+         m_zones[idx].baseClose = c;
+         m_zones[idx].momentumSize = momentum;
+         m_zones[idx].energyLevel = 1.0; // Fresh
+         m_zones[idx].consumptionCount = 0;
+         m_zones[idx].baseType = baseType;
+         m_zones[idx].createdTime = iTime(m_sym, m_tf, i);
+         m_zones[idx].lastTested = 0;
+         m_zones[idx].isBullish = isBullish;
+         m_zones[idx].isActive = true;
+         m_zones[idx].timeframe = EnumToString(m_tf);
+         m_zones[idx].zoneScore = zoneScore;
+      }
+   }
+   
+   // Check if price is in any cause zone
+   bool IsInCauseZone(double price, bool isLong, int& zoneIdx) {
+      for(int i = 0; i < ArraySize(m_zones); i++) {
+         if(!m_zones[i].isActive) continue;
+         // Check if price within zone
+         if(price >= m_zones[i].zoneLow && price <= m_zones[i].zoneHigh) {
+            // Check if cause direction matches trade direction
+            if((isLong && m_zones[i].isBullish) || (!isLong && !m_zones[i].isBullish)) {
+               zoneIdx = i;
+               return true;
+            }
+         }
+      }
+      return false;
+   }
+   
+   // Get zone score for price
+   double GetZoneScore(double price, bool isLong) {
+      double bestScore = 0;
+      for(int i = 0; i < ArraySize(m_zones); i++) {
+         if(!m_zones[i].isActive) continue;
+         if(price >= m_zones[i].zoneLow && price <= m_zones[i].zoneHigh) {
+            if((isLong && m_zones[i].isBullish) || (!isLong && !m_zones[i].isBullish)) {
+               bestScore = MathMax(bestScore, m_zones[i].zoneScore * m_zones[i].energyLevel);
+            }
+         }
+      }
+      return bestScore;
+   }
+   
+   // Get nearest cause zone
+   double GetNearestCauseDistance(double price, bool isLong) {
+      double minDist = 999999;
+      for(int i = 0; i < ArraySize(m_zones); i++) {
+         if(!m_zones[i].isActive) continue;
+         if((isLong && m_zones[i].isBullish) || (!isLong && !m_zones[i].isBullish)) {
+            double dist = MathAbs(price - (m_zones[i].zoneHigh + m_zones[i].zoneLow) / 2);
+            minDist = MathMin(minDist, dist);
+         }
+      }
+      return minDist;
+   }
+   
+   // Get total active zones
+   int GetActiveZones() {
+      int cnt = 0;
+      for(int i = 0; i < ArraySize(m_zones); i++) {
+         if(m_zones[i].isActive) cnt++;
+      }
+      return cnt;
+   }
+   
+   // Get zone by index
+   SCausalZone GetZone(int idx) {
+      if(idx >= 0 && idx < ArraySize(m_zones)) return m_zones[idx];
+      SCausalZone empty;
+      empty.isActive = false;
+      return empty;
+   }
+   
+   // Access internal array
+   SCausalZone& GetZones() { return m_zones; }
+};
+
+//+------------------------------------------------------------------+
+//| CReturnBehaviorAnalyzer — Analyze Return Phase (Velocity/Pattern) |
+//+------------------------------------------------------------------+
+class CReturnBehaviorAnalyzer {
+private:
+   string    m_sym;
+   ENUM_TIMEFRAMES m_tf;
+   SReturnBehavior m_behavior;
+   double    m_velocityThreshold; // pts per minute
+   double    m_history[];
+   datetime  m_historyTime[];
+   
+   // Calculate velocity of price approaching cause
+   double CalcVelocity(double price, datetime now) {
+      if(m_history[0] == 0) return 0;
+      
+      double minutes = (now - m_historyTime[0]) / 60.0;
+      if(minutes <= 0) return 0;
+      
+      double distance = MathAbs(price - m_history[0]);
+      return distance / minutes;
+   }
+   
+   // Calculate path deviation (straightness)
+   double CalcPathDeviation() {
+      if(ArraySize(m_history) < 3) return 0;
+      double total = 0;
+      double straight = MathAbs(m_history[ArraySize(m_history)-1] - m_history[0]);
+      for(int i = 1; i < ArraySize(m_history); i++) {
+         total += MathAbs(m_history[i] - m_history[i-1]);
+      }
+      if(total == 0) return 0;
+      return (total - straight) / total; // Higher = more zigzag
+   }
+
+public:
+   CReturnBehaviorAnalyzer(string sym, ENUM_TIMEFRAMES tf, double velocityThreshold) {
+      m_sym = sym;
+      m_tf = tf;
+      m_velocityThreshold = velocityThreshold;
+      ArrayResize(m_history, 0);
+      ArrayResize(m_historyTime, 0);
+      m_behavior.isReturning = false;
+      m_behavior.velocity = 0;
+      m_behavior.distance = 999999;
+      m_behavior.pathDeviation = 0;
+   }
+   
+   // Start tracking return to cause
+   void StartReturn(double price, datetime now) {
+      m_behavior.startTime = now;
+      m_behavior.startPrice = price;
+      m_behavior.currentPrice = price;
+      m_behavior.isReturning = true;
+      m_behavior.ticksCount = 0;
+      ArrayResize(m_history, 0);
+      ArrayResize(m_historyTime, 0);
+   }
+   
+   // Update return tracking
+   void Update(double price, datetime now, double causeZoneCenter) {
+      m_behavior.currentPrice = price;
+      m_behavior.distance = MathAbs(price - causeZoneCenter);
+      m_behavior.ticksCount++;
+      
+      // Add to history
+      int idx = ArraySize(m_history);
+      ArrayResize(m_history, idx + 1);
+      ArrayResize(m_historyTime, idx + 1);
+      m_history[idx] = price;
+      m_historyTime[idx] = now;
+      
+      // Keep last 100 points
+      if(ArraySize(m_history) > 100) {
+         ArrayResize(m_history, 100);
+         ArrayResize(m_historyTime, 100);
+      }
+      
+      // Calculate velocity
+      m_behavior.velocity = CalcVelocity(price, now);
+      m_behavior.pathDeviation = CalcPathDeviation();
+   }
+   
+   // Classify return behavior
+   string ClassifyReturn() {
+      if(!m_behavior.isReturning) return "none";
+      
+      // Fast return = high velocity = likely break
+      if(m_behavior.velocity > m_velocityThreshold * 2.0) {
+         if(m_behavior.pathDeviation < 0.3) return "fast_direct"; // Fast + direct = likely break
+         return "fast_choppy"; // Fast but choppy = uncertain
+      }
+      // Slow return = low velocity = likely respect
+      if(m_behavior.velocity < m_velocityThreshold * 0.5) {
+         return "slow_gradual"; // Slow + gradual = likely respect
+      }
+      // Medium
+      return "medium_mixed";
+   }
+   
+   // Predict reaction based on return behavior
+   double PredictReactionProb() {
+      string classification = ClassifyReturn();
+      if(classification == "fast_direct") return 0.3;  // 30% respect, 70% break
+      if(classification == "fast_choppy") return 0.5;  // 50/50
+      if(classification == "slow_gradual") return 0.8; // 80% respect
+      if(classification == "medium_mixed") return 0.6; // 60% respect
+      return 0.5;
+   }
+   
+   // Get current behavior
+   SReturnBehavior GetBehavior() { return m_behavior; }
+   
+   // Reset
+   void Reset() {
+      m_behavior.isReturning = false;
+      ArrayResize(m_history, 0);
+      ArrayResize(m_historyTime, 0);
+   }
+   
+   // Is price returning to cause?
+   bool IsReturning() { return m_behavior.isReturning; }
+   
+   double GetVelocity() { return m_behavior.velocity; }
+   double GetDistance() { return m_behavior.distance; }
+   double GetPathDeviation() { return m_behavior.pathDeviation; }
+};
+
+//+------------------------------------------------------------------+
+//| CEnergyDecayModel — Track Zone Consumption & Energy Transfer      |
+//+------------------------------------------------------------------+
+class CEnergyDecayModel {
+private:
+   double    m_decayPerTest;    // Energy lost per test
+   double    m_decayPerTime;    // Energy lost per bar
+   double    m_maxDistance;     // Max distance before energy depleted
+   
+   // Calculate energy decay from consumption
+   double CalcConsumptionDecay(int count) {
+      return MathPow(1.0 - m_decayPerTest, count);
+   }
+   
+   // Calculate energy decay from time
+   double CalcTimeDecay(int barsElapsed) {
+      return MathPow(1.0 - m_decayPerTime, barsElapsed);
+   }
+   
+   // Calculate energy decay from distance
+   double CalcDistanceDecay(double distance, double atr) {
+      if(atr <= 0) return 1.0;
+      double ratio = distance / atr;
+      if(ratio > m_maxDistance) return 0;
+      return 1.0 - (ratio / m_maxDistance);
+   }
+
+public:
+   CEnergyDecayModel(double decayPerTest, double decayPerTime, double maxDistance) {
+      m_decayPerTest = decayPerTest;
+      m_decayPerTime = decayPerTime;
+      m_maxDistance = maxDistance;
+   }
+   
+   // Calculate current energy of a zone
+   double CalcEnergy(SCausalZone& zone, double currentPrice, double atr, int currentBar) {
+      if(!zone.isActive) return 0;
+      
+      double consumption = CalcConsumptionDecay(zone.consumptionCount);
+      double time = 1.0;
+      if(zone.createdTime > 0) {
+         int barsElapsed = (int)((TimeCurrent() - zone.createdTime) / PeriodSeconds(PERIOD_H1));
+         time = CalcTimeDecay(barsElapsed);
+      }
+      double distance = CalcDistanceDecay(
+         MathAbs(currentPrice - (zone.zoneHigh + zone.zoneLow) / 2),
+         atr
+      );
+      
+      // Energy = base * consumption * time * distance
+      double energy = zone.energyLevel * consumption * time * distance;
+      return MathMax(0.1, MathMin(1.0, energy));
+   }
+   
+   // Update zone energy after test
+   void UpdateAfterTest(SCausalZone& zone, double currentPrice, double atr) {
+      zone.consumptionCount++;
+      zone.lastTested = TimeCurrent();
+      zone.energyLevel = CalcEnergy(zone, currentPrice, atr, 0);
+      
+      // Deactivate if energy too low
+      if(zone.energyLevel < 0.2) {
+         zone.isActive = false;
+      }
+   }
+   
+   // Check if zone is fresh
+   bool IsFresh(SCausalZone& zone) {
+      return zone.isActive && zone.energyLevel > 0.7 && zone.consumptionCount < 2;
+   }
+   
+   // Check if zone is consumed
+   bool IsConsumed(SCausalZone& zone) {
+      return !zone.isActive || zone.energyLevel < 0.3 || zone.consumptionCount >= 5;
+   }
+   
+   // Energy transfer efficiency — higher when price moves efficiently
+   double CalcTransferEfficiency(double startPrice, double currentPrice, double targetPrice, double atr) {
+      double totalDistance = MathAbs(currentPrice - startPrice);
+      double targetDistance = MathAbs(targetPrice - startPrice);
+      if(targetDistance <= 0) return 0;
+      
+      // Efficiency = targetDistance / totalDistance (higher = more efficient)
+      double efficiency = targetDistance / totalDistance;
+      return MathMin(1.0, efficiency);
+   }
+};
+
+//+------------------------------------------------------------------+
+//| CTargetEfficiency — Calculate Clean Room & Target Compression       |
+//+------------------------------------------------------------------+
+class CTargetEfficiency {
+private:
+   string    m_sym;
+   ENUM_TIMEFRAMES m_tf;
+   int       m_lookback;
+   
+   // Count obstacles in path
+   int CountObstacles(double startPrice, double targetPrice) {
+      int obstacles = 0;
+      double minP = MathMin(startPrice, targetPrice);
+      double maxP = MathMax(startPrice, targetPrice);
+      
+      // Check recent highs/lows as obstacles
+      for(int i = 1; i <= m_lookback; i++) {
+         double h = iHigh(m_sym, m_tf, i);
+         double l = iLow(m_sym, m_tf, i);
+         if(h > minP && h < maxP && startPrice < targetPrice) obstacles++; // Going up, high is obstacle
+         if(l > minP && l < maxP && startPrice > targetPrice) obstacles++; // Going down, low is obstacle
+      }
+      return obstacles;
+   }
+
+public:
+   CTargetEfficiency(string sym, ENUM_TIMEFRAMES tf, int lookback) {
+      m_sym = sym;
+      m_tf = tf;
+      m_lookback = lookback;
+   }
+   
+   // Calculate target efficiency
+   STargetEfficiency CalcEfficiency(double currentPrice, bool isLong, SCausalZone& causeZone) {
+      STargetEfficiency eff;
+      
+      // Nearest target = previous high/low
+      double nearestHigh = 0;
+      double nearestLow = 999999;
+      for(int i = 1; i <= m_lookback; i++) {
+         nearestHigh = MathMax(nearestHigh, iHigh(m_sym, m_tf, i));
+         nearestLow = MathMin(nearestLow, iLow(m_sym, m_tf, i));
+      }
+      
+      eff.targetHigh = nearestHigh;
+      eff.targetLow = nearestLow;
+      eff.cleanRoomBuy = (nearestHigh - currentPrice) / Point;
+      eff.cleanRoomSell = (currentPrice - nearestLow) / Point;
+      
+      // Compression ratio = (target range) / (recent range)
+      double recentRange = nearestHigh - nearestLow;
+      double olderRange = 0;
+      double olderHigh = 0, olderLow = 999999;
+      for(int i = m_lookback + 1; i <= m_lookback * 2; i++) {
+         olderHigh = MathMax(olderHigh, iHigh(m_sym, m_tf, i));
+         olderLow = MathMin(olderLow, iLow(m_sym, m_tf, i));
+      }
+      olderRange = olderHigh - olderLow;
+      if(olderRange > 0) {
+         eff.compressionRatio = recentRange / olderRange;
+      } else {
+         eff.compressionRatio = 1.0;
+      }
+      
+      // Obstacles
+      double target = isLong ? nearestHigh : nearestLow;
+      eff.obstacleCount = CountObstacles(currentPrice, target);
+      
+      // Is efficient = clean room > 50 pts and obstacles < 2
+      eff.isEfficient = (isLong ? eff.cleanRoomBuy : eff.cleanRoomSell) > 50 && eff.obstacleCount < 2;
+      
+      return eff;
+   }
+   
+   // Get clean room percentage
+   double GetCleanRoomPct(double currentPrice, bool isLong, double targetPrice) {
+      double distance = MathAbs(targetPrice - currentPrice);
+      double atr = iATR(m_sym, m_tf, 14, 1);
+      if(atr <= 0) return 0;
+      return MathMin(1.0, distance / (atr * 3.0));
+   }
+   
+   // Check if target is narrowing
+   bool IsTargetNarrowing() {
+      double recentHigh = 0, recentLow = 999999;
+      double olderHigh = 0, olderLow = 999999;
+      
+      for(int i = 1; i <= m_lookback; i++) {
+         recentHigh = MathMax(recentHigh, iHigh(m_sym, m_tf, i));
+         recentLow = MathMin(recentLow, iLow(m_sym, m_tf, i));
+      }
+      for(int i = m_lookback + 1; i <= m_lookback * 2; i++) {
+         olderHigh = MathMax(olderHigh, iHigh(m_sym, m_tf, i));
+         olderLow = MathMin(olderLow, iLow(m_sym, m_tf, i));
+      }
+      
+      double recentRange = recentHigh - recentLow;
+      double olderRange = olderHigh - olderLow;
+      
+      if(olderRange <= 0) return false;
+      return (recentRange / olderRange) < 0.7; // 30% narrower = narrowing
+   }
+};
+
+//+------------------------------------------------------------------+
+//| CMultiTimeframeConfluence — Stack Causes Across Timeframes         |
+//+------------------------------------------------------------------+
+class CMultiTimeframeConfluence {
+private:
+   CCausalZoneDetector* m_htfDetector;
+   CCausalZoneDetector* m_mtfDetector;
+   CCausalZoneDetector* m_ltfDetector;
+   
+public:
+   CMultiTimeframeConfluence(string sym) {
+      m_htfDetector = new CCausalZoneDetector(sym, PERIOD_H4, 10, 20);
+      m_mtfDetector = new CCausalZoneDetector(sym, PERIOD_H1, 15, 30);
+      m_ltfDetector = new CCausalZoneDetector(sym, PERIOD_M15, 20, 50);
+   }
+   
+   ~CMultiTimeframeConfluence() {
+      if(m_htfDetector != NULL) { delete m_htfDetector; m_htfDetector = NULL; }
+      if(m_mtfDetector != NULL) { delete m_mtfDetector; m_mtfDetector = NULL; }
+      if(m_ltfDetector != NULL) { delete m_ltfDetector; m_ltfDetector = NULL; }
+   }
+   
+   // Detect zones on all timeframes
+   void DetectAll() {
+      m_htfDetector.DetectZones();
+      m_mtfDetector.DetectZones();
+      m_ltfDetector.DetectZones();
+   }
+   
+   // Calculate confluence score
+   // Returns 0-1 score based on how many TFs align
+   double CalcConfluenceScore(double price, bool isLong) {
+      double htfScore = m_htfDetector.GetZoneScore(price, isLong);
+      double mtfScore = m_mtfDetector.GetZoneScore(price, isLong);
+      double ltfScore = m_ltfDetector.GetZoneScore(price, isLong);
+      
+      // Weighted: HTF 50%, MTF 30%, LTF 20%
+      double score = htfScore * 0.5 + mtfScore * 0.3 + ltfScore * 0.2;
+      
+      // Bonus for alignment (all 3 present)
+      if(htfScore > 0.5 && mtfScore > 0.5 && ltfScore > 0.5) {
+         score += 0.1;
+      }
+      
+      return MathMin(1.0, score);
+   }
+   
+   // Check if HTF cause aligns with MTF cause
+   bool IsAligned(double price, bool isLong) {
+      int htfIdx, mtfIdx, ltfIdx;
+      bool htfIn = m_htfDetector.IsInCauseZone(price, isLong, htfIdx);
+      bool mtfIn = m_mtfDetector.IsInCauseZone(price, isLong, mtfIdx);
+      bool ltfIn = m_ltfDetector.IsInCauseZone(price, isLong, ltfIdx);
+      
+      // At least 2 of 3 must align
+      int count = 0;
+      if(htfIn) count++;
+      if(mtfIn) count++;
+      if(ltfIn) count++;
+      
+      return count >= 2;
+   }
+   
+   // Get best zone from any TF
+   SCausalZone GetBestZone(double price, bool isLong) {
+      SCausalZone best;
+      best.zoneScore = 0;
+      
+      int htfIdx, mtfIdx, ltfIdx;
+      if(m_htfDetector.IsInCauseZone(price, isLong, htfIdx)) {
+         SCausalZone z = m_htfDetector.GetZone(htfIdx);
+         if(z.zoneScore > best.zoneScore) best = z;
+      }
+      if(m_mtfDetector.IsInCauseZone(price, isLong, mtfIdx)) {
+         SCausalZone z = m_mtfDetector.GetZone(mtfIdx);
+         if(z.zoneScore > best.zoneScore) best = z;
+      }
+      if(m_ltfDetector.IsInCauseZone(price, isLong, ltfIdx)) {
+         SCausalZone z = m_ltfDetector.GetZone(ltfIdx);
+         if(z.zoneScore > best.zoneScore) best = z;
+      }
+      
+      return best;
+   }
+   
+   // Get zone counts
+   int GetHTFCount() { return m_htfDetector.GetActiveZones(); }
+   int GetMTFCount() { return m_mtfDetector.GetActiveZones(); }
+   int GetLTFCount() { return m_ltfDetector.GetActiveZones(); }
+};
+
+//+------------------------------------------------------------------+
+//| Causal-Effect Global Instances                                    |
+//+------------------------------------------------------------------+
+CCausalZoneDetector* g_causalDetector;
+CReturnBehaviorAnalyzer* g_returnAnalyzer;
+CEnergyDecayModel* g_energyModel;
+CTargetEfficiency* g_targetEff;
+CMultiTimeframeConfluence* g_confluence;
+
+//+------------------------------------------------------------------+
+//| GLOBAL INSTANCES (Existing)                                       |
 //+------------------------------------------------------------------+
 CSMSEngine*  g_sms;
 CDeltaEngine* g_delta;
@@ -609,13 +1286,140 @@ CTradeManager* g_trade;
 CNexusAPI*   g_api;
 
 //+------------------------------------------------------------------+
+//| CAUSAL-EFFECT SIGNAL GENERATOR                                     |
+//| Returns true if signal generated, false if no signal              |
+//| Incorporates: cause zones, return behavior, energy, confluence    |
+//+------------------------------------------------------------------+
+bool GenerateCausalSignal(STradeSignal& sig, bool useCausal) {
+   if(!useCausal) return false;
+   
+   // Reset signal
+   sig.tradeType   = WRONG_VALUE;
+   sig.confidence  = 0.0;
+   sig.rationale   = "";
+   sig.smsType     = "none";
+   sig.regime      = g_currentRegime;
+   
+   // Detect zones on all TFs
+   g_confluence.DetectAll();
+   
+   double price = Close(1);
+   double atr = iATR(Symbol(), PERIOD_H1, 14, 1);
+   
+   // Check for confluence (at least 2 TFs aligned)
+   bool bullAligned = g_confluence.IsAligned(price, true);
+   bool bearAligned = g_confluence.IsAligned(price, false);
+   
+   if(!bullAligned && !bearAligned) return false;
+   
+   // Determine trade direction
+   bool isLong = bullAligned;
+   if(bullAligned && bearAligned) {
+      // Both aligned — use confluence score
+      double bullScore = g_confluence.CalcConfluenceScore(price, true);
+      double bearScore = g_confluence.CalcConfluenceScore(price, false);
+      isLong = bullScore > bearScore;
+   }
+   
+   // Get best zone
+   SCausalZone cause = g_confluence.GetBestZone(price, isLong);
+   if(!cause.isActive) return false;
+   
+   // Check energy
+   double energy = g_energyModel.CalcEnergy(cause, price, atr, 0);
+   if(g_energyModel.IsConsumed(cause)) {
+      sig.rationale = "CAUSE_CONSUMED|SKIP";
+      return false;
+   }
+   
+   // Check if price is returning to cause
+   double causeCenter = (cause.zoneHigh + cause.zoneLow) / 2;
+   g_returnAnalyzer.StartReturn(price, TimeCurrent());
+   g_returnAnalyzer.Update(price, TimeCurrent(), causeCenter);
+   
+   // Classify return behavior
+   string returnType = g_returnAnalyzer.ClassifyReturn();
+   double respectProb = g_returnAnalyzer.PredictReactionProb();
+   
+   // Fast return = likely break, skip
+   if(returnType == "fast_direct" && respectProb < 0.4) {
+      sig.rationale = "FAST_RETURN|LIKELY_BREAK|SKIP";
+      return false;
+   }
+   
+   // Calculate target efficiency
+   STargetEfficiency eff = g_targetEff.CalcEfficiency(price, isLong, cause);
+   
+   // Check clean room
+   if(!eff.isEfficient) {
+      sig.rationale = "NO_CLEAN_ROOM|SKIP";
+      return false;
+   }
+   
+   // Check target narrowing
+   if(g_targetEff.IsTargetNarrowing()) {
+      // Reduce TP if target is narrowing
+      eff.targetHigh = (eff.targetHigh + causeCenter) / 2;
+      eff.targetLow = (eff.targetLow + causeCenter) / 2;
+   }
+   
+   // Calculate SL and TP
+   double slPoints = atr * 1.5 / Point;
+   double tpPoints = isLong ? (eff.targetHigh - price) / Point : (price - eff.targetLow) / Point;
+   
+   // Adjust SL based on cause zone
+   if(isLong) {
+      sig.sl = MathMax(slPoints, (price - cause.zoneLow) / Point + 10);
+   } else {
+      sig.sl = MathMax(slPoints, (cause.zoneHigh - price) / Point + 10);
+   }
+   
+   sig.tp = tpPoints;
+   
+   // Calculate confidence
+   double confluenceScore = g_confluence.CalcConfluenceScore(price, isLong);
+   double energyScore = energy;
+   double returnScore = respectProb;
+   double cleanRoomScore = eff.isEfficient ? 0.8 : 0.4;
+   
+   sig.confidence = MathMin(0.95, 
+      confluenceScore * 0.35 + 
+      energyScore * 0.25 + 
+      returnScore * 0.25 + 
+      cleanRoomScore * 0.15
+   );
+   
+   sig.tradeType = isLong ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+   sig.rationale = StringFormat("CAUSE|%s|ENERGY%.0f%%|RETURN_%s|CONFL%.0f%%|CLEAN%.0f%%",
+      cause.isBullish ? "BULL" : "BEAR",
+      energy * 100,
+      returnType,
+      confluenceScore * 100,
+      cleanRoomScore * 100
+   );
+   sig.smsType = "causal_zone";
+   sig.riskReward = sig.tp / sig.sl;
+   
+   return true;
+}
+
+
+//+------------------------------------------------------------------+
 //| ONINIT                                                            |
 //+------------------------------------------------------------------+
 int OnInit() {
+   // Existing instances
    g_sms   = new CSMSEngine(Symbol());
    g_delta = new CDeltaEngine(Symbol());
    g_trade = new CTradeManager(InpMagic, Symbol());
    g_api   = new CNexusAPI(InpAPIHost, InpAPIKey, InpAPITimeout);
+   
+   // Causal-Effect instances
+   g_causalDetector = new CCausalZoneDetector(Symbol(), PERIOD_H1, 15, 30);
+   g_returnAnalyzer = new CReturnBehaviorAnalyzer(Symbol(), PERIOD_M15, 5.0);
+   g_energyModel    = new CEnergyDecayModel(0.15, 0.02, 5.0); // 15% per test, 2% per bar, 5x ATR max
+   g_targetEff      = new CTargetEfficiency(Symbol(), PERIOD_H1, 20);
+   g_confluence     = new CMultiTimeframeConfluence(Symbol());
    
    g_barTimes[0] = iTime(Symbol(), InpHTF, 0);
    g_barTimes[1] = iTime(Symbol(), InpMTF, 0);
@@ -631,6 +1435,7 @@ int OnInit() {
    Print("  LTF     : ", EnumToString(InpLTF));
    Print("  SMS     : ", InpUseSMS ? "ON" : "OFF");
    Print("  Delta   : ", InpUseDelta ? "ON" : "OFF");
+   Print("  Causal  : ON (Cause-Effect Engine v1)");
    Print("  API     : ", InpUseAPI ? "ON (connected to " + InpAPIHost + ")" : "OFF (manual regime)");
    Print("  Risk    : ", InpRiskPercent, "% per trade | ", InpMaxTradesPerDay, " trades/day max");
    
@@ -645,6 +1450,12 @@ void OnDeinit(const int reason) {
    if(g_delta != NULL) { delete g_delta; g_delta = NULL; }
    if(g_trade != NULL) { delete g_trade; g_trade = NULL; }
    if(g_api   != NULL) { delete g_api;   g_api   = NULL; }
+   // Causal-Effect cleanup
+   if(g_causalDetector != NULL) { delete g_causalDetector; g_causalDetector = NULL; }
+   if(g_returnAnalyzer != NULL) { delete g_returnAnalyzer; g_returnAnalyzer = NULL; }
+   if(g_energyModel    != NULL) { delete g_energyModel;    g_energyModel    = NULL; }
+   if(g_targetEff      != NULL) { delete g_targetEff;      g_targetEff      = NULL; }
+   if(g_confluence     != NULL) { delete g_confluence;     g_confluence     = NULL; }
    Print("=== nexus-core Deinitialized ===");
 }
 
@@ -738,6 +1549,21 @@ bool GenerateSignal(STradeSignal& sig) {
    sig.rationale   = "";
    sig.smsType     = "none";
    sig.regime      = g_currentRegime;
+   
+   // === CAUSAL-EFFECT SIGNAL FIRST ===
+   bool causal = GenerateCausalSignal(sig, true);
+   if(causal) {
+      // Log causal zone consumption
+      double price = Close(1);
+      double atr = iATR(Symbol(), PERIOD_H1, 14, 1);
+      SCausalZone cause = g_confluence.GetBestZone(price, sig.tradeType == ORDER_TYPE_BUY);
+      if(cause.isActive) {
+         g_energyModel.UpdateAfterTest(cause, price, atr);
+      }
+      return true;
+   }
+   
+   // === FALLBACK: REGIME-ADAPTIVE SIGNAL ===
    
    // Check delta absorption
    bool absorption = InpUseDelta && g_delta.IsAbsorption();
@@ -948,11 +1774,13 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
    }
    
    Comment(StringFormat(
-      "=== nexus-core | VicChelenge System ===\n"
+      "=== nexus-core | VicChelenge System v1.1 ===\n"
       "Regime  : %s (%.0f%% confidence)\n"
       "Balance : %.2f  Equity: %.2f\n"
       "Open    : %d/%d  TradesToday: %d/%d\n"
       "SMS     : OB:%d | FVG:%d | LIQ:%d\n"
+      "Causal  : Z:%d | Vel:%.1f | NRG:%.0f%%\n"
+      "Return  : %s | Confl:%d/%d/%d\n"
       "Delta   : %s\n"
       "API     : %s\n"
       "\n"
@@ -965,6 +1793,15 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
       InpUseSMS ? g_sms.GetOBTotal() : 0,
       InpUseSMS ? g_sms.GetFVGTotal() : 0,
       InpUseSMS ? g_sms.GetLiqTotal() : 0,
+      g_causalDetector != NULL ? g_causalDetector.GetActiveZones() : 0,
+      g_returnAnalyzer != NULL ? g_returnAnalyzer.GetVelocity() : 0,
+      g_energyModel != NULL ? (g_causalDetector != NULL ? g_energyModel.CalcEnergy(
+         g_causalDetector.GetZone(0), Close(1), iATR(Symbol(), PERIOD_H1, 14, 1), 0
+      ) * 100 : 0) : 0,
+      g_returnAnalyzer != NULL ? g_returnAnalyzer.ClassifyReturn() : "OFF",
+      g_confluence != NULL ? g_confluence.GetHTFCount() : 0,
+      g_confluence != NULL ? g_confluence.GetMTFCount() : 0,
+      g_confluence != NULL ? g_confluence.GetLTFCount() : 0,
       InpUseDelta ? (g_delta.IsAbsorption() ? "ABSORBING" : "NORMAL") : "OFF",
       InpUseAPI ? "CONNECTED" : "OFFLINE"
    ));
