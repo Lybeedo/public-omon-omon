@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Mini App</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background-color: var(--tg-theme-bg-color, #ffffff);
+      color: var(--tg-theme-text-color, #1a1a1a);
+      min-height: 100vh;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      max-width: 420px;
+      width: 100%;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 4px;
+    }
+    .header p {
+      color: var(--tg-theme-hint-color, #999);
+      font-size: 14px;
+    }
+
+    /* User Card */
+    .user-card {
+      background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+      border-radius: 16px;
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .user-card .avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: var(--tg-theme-button-color, #3390ec);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin: 0 auto 12px;
+    }
+    .user-card .name {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .user-card .id {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color, #999);
+      margin-top: 4px;
+    }
+
+    /* Card Section */
+    .card {
+      background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+      border-radius: 16px;
+      padding: 16px 20px;
+      margin-bottom: 12px;
+    }
+    .card h3 {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--tg-theme-hint-color, #999);
+      margin-bottom: 8px;
+    }
+    .card .value {
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    /* Buttons */
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 10px;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary {
+      background-color: var(--tg-theme-button-color, #3390ec);
+      color: var(--tg-theme-button-text-color, #ffffff);
+    }
+    .btn-secondary {
+      background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+      color: var(--tg-theme-text-color, #1a1a1a);
+    }
+    .btn-danger {
+      background: #e53935;
+      color: #fff;
+    }
+
+    /* Status Log */
+    .log-area {
+      margin-top: 16px;
+      max-height: 200px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .log-item {
+      font-size: 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: var(--tg-theme-secondary-bg-color, #f5f5f5);
+      margin-bottom: 4px;
+      word-break: break-all;
+    }
+    .log-item.success { border-left: 3px solid #4caf50; }
+    .log-item.error   { border-left: 3px solid #e53935; }
+    .log-item.info    { border-left: 3px solid #3390ec; }
+
+    /* Pulse animation */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .loading { animation: pulse 1.5s infinite; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>🚀 Mini App</h1>
+      <p>Telegram Mini App Boilerplate</p>
+    </div>
+
+    <!-- User Card -->
+    <div class="user-card" id="user-card">
+      <div class="avatar" id="avatar">?</div>
+      <div class="name" id="user-name">Loading...</div>
+      <div class="id" id="user-id">-</div>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="card">
+      <h3>Theme</h3>
+      <div class="value" id="theme-info">-</div>
+    </div>
+    <div class="card">
+      <h3>Platform</h3>
+      <div class="value" id="platform-info">-</div>
+    </div>
+
+    <!-- Action Buttons -->
+    <button class="btn btn-primary" id="btn-validate">🔐 Validate Session</button>
+    <button class="btn btn-secondary" id="btn-send">📤 Send Data to Bot</button>
+    <button class="btn btn-secondary" id="btn-haptic">📳 Test Haptic</button>
+    <button class="btn btn-secondary" id="btn-alert">💬 Show Alert</button>
+    <button class="btn btn-danger" id="btn-close">✕ Close App</button>
+
+    <!-- Activity Log -->
+    <div class="card" style="margin-top: 16px;">
+      <h3>Activity Log</h3>
+      <div class="log-area" id="log-area"></div>
+    </div>
+  </div>
+
+  <script>
+    // ─── Init Telegram WebApp ────────────────────────────
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+    tg.ready();
+
+    const API_BASE = window.location.origin;
+
+    // ─── Helper: Add Log ─────────────────────────────────
+    function addLog(text, type = 'info') {
+      const logArea = document.getElementById('log-area');
+      const item = document.createElement('div');
+      item.className = `log-item ${type}`;
+      const time = new Date().toLocaleTimeString('id-ID');
+      item.textContent = `[${time}] ${text}`;
+      logArea.prepend(item);
+      // Keep max 20 items
+      while (logArea.children.length > 20) {
+        logArea.removeChild(logArea.lastChild);
+      }
+    }
+
+    // ─── Populate User Info ──────────────────────────────
+    const user = tg.initDataUnsafe?.user;
+    if (user) {
+      const initials = (user.first_name?.[0] || '?') + (user.last_name?.[0] || '');
+      document.getElementById('avatar').textContent = initials.toUpperCase();
+      document.getElementById('user-name').textContent =
+        `${user.first_name || ''} ${user.last_name || ''}`.trim();
+      document.getElementById('user-id').textContent =
+        `ID: ${user.id} • @${user.username || 'no_username'}`;
+      addLog(`User loaded: ${user.first_name}`, 'success');
+    } else {
+      document.getElementById('user-name').textContent = 'No user data';
+      addLog('No user data available', 'error');
+    }
+
+    // ─── Theme Info ──────────────────────────────────────
+    document.getElementById('theme-info').textContent =
+      `${tg.colorScheme === 'dark' ? '🌙 Dark' : '☀️ Light'} • ${tg.themeParams.bg_color || 'default'}`;
+    document.getElementById('platform-info').textContent =
+      tg.platform || 'unknown';
+
+    // ─── Close Confirmation ─────────────────────────────
+    tg.enableClosingConfirmation();
+
+    // ─── Button: Validate Session ────────────────────────
+    document.getElementById('btn-validate').addEventListener('click', async () => {
+      addLog('Validating session...', 'info');
+      try {
+        const res = await fetch(`${API_BASE}/api/validate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          addLog(`✅ Valid! Welcome ${data.user?.first_name}`, 'success');
+          tg.HapticFeedback.notificationOccurred('success');
+        } else {
+          addLog(`❌ Invalid: ${data.error}`, 'error');
+          tg.HapticFeedback.notificationOccurred('error');
+        }
+      } catch (err) {
+        addLog(`❌ Error: ${err.message}`, 'error');
+      }
+    });
+
+    // ─── Button: Send Data to Bot ────────────────────────
+    document.getElementById('btn-send').addEventListener('click', () => {
+      const payload = {
+        action: 'submit',
+        timestamp: Date.now(),
+        platform: tg.platform,
+        user_id: user?.id
+      };
+      tg.sendData(JSON.stringify(payload));
+      addLog(`📤 Sent: ${JSON.stringify(payload)}`, 'success');
+      tg.HapticFeedback.notificationOccurred('success');
+    });
+
+    // ─── Button: Haptic Test ─────────────────────────────
+    document.getElementById('btn-haptic').addEventListener('click', () => {
+      tg.HapticFeedback.impactOccurred('medium');
+      addLog('📳 Haptic: medium impact', 'info');
+
+      setTimeout(() => {
+        tg.HapticFeedback.impactOccurred('heavy');
+        addLog('📳 Haptic: heavy impact', 'info');
+      }, 300);
+
+      setTimeout(() => {
+        tg.HapticFeedback.notificationOccurred('success');
+        addLog('📳 Haptic: success notification', 'success');
+      }, 600);
+    });
+
+    // ─── Button: Show Alert ──────────────────────────────
+    document.getElementById('btn-alert').addEventListener('click', () => {
+      tg.showPopup({
+        title: '🎉 Hello!',
+        message: `Halo ${user?.first_name || 'User'}! Mini App berjalan dengan baik.`,
+        buttons: [
+          { id: 'ok', type: 'ok', text: 'Mantap!' },
+          { id: 'close', type: 'cancel', text: 'Tutup' }
+        ]
+      }, (buttonId) => {
+        addLog(`Popup button: ${buttonId}`, 'info');
+      });
+    });
+
+    // ─── Button: Close App ───────────────────────────────
+    document.getElementById('btn-close').addEventListener('click', () => {
+      addLog('Closing...', 'info');
+      tg.close();
+    });
+
+    // ─── MainButton (hidden, we use custom buttons) ─────
+    tg.MainButton.hide();
+
+    // ─── BackButton ──────────────────────────────────────
+    tg.BackButton.show();
+    tg.BackButton.onClick(() => {
+      addLog('Back pressed', 'info');
+      tg.close();
+    });
+
+    addLog('🚀 Mini App initialized', 'success');
+  </script>
+</body>
+</html>
