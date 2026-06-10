@@ -17,18 +17,26 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller>=6.0"])
     import PyInstaller.__main__
 
-# Discover safehttpx module path and version.txt
-safehttpx_path = None
-version_txt_path = None
-try:
-    import safehttpx
-    safehttpx_path = os.path.dirname(safehttpx.__file__)
-    version_txt = os.path.join(safehttpx_path, "version.txt")
-    if os.path.exists(version_txt):
-        version_txt_path = version_txt
-        print(f"Found safehttpx version.txt: {version_txt_path}")
-except Exception as e:
-    print(f"Could not find safehttpx: {e}")
+# Discover modules with version.txt files that PyInstaller might miss
+extra_data = []
+
+def find_version_txt(module_name):
+    try:
+        mod = importlib.import_module(module_name)
+        mod_path = os.path.dirname(mod.__file__)
+        version_txt = os.path.join(mod_path, "version.txt")
+        if os.path.exists(version_txt):
+            print(f"Found {module_name} version.txt: {version_txt}")
+            return f"{version_txt};{module_name}"
+    except Exception as e:
+        print(f"Could not find {module_name}: {e}")
+    return None
+
+# Check common modules that have version.txt
+for mod_name in ["safehttpx", "groovy"]:
+    data = find_version_txt(mod_name)
+    if data:
+        extra_data.append(data)
 
 # Build args
 args = [
@@ -72,20 +80,27 @@ args = [
     "--collect-all", "httptools",
     "--collect-all", "websockets",
     "--collect-all", "safehttpx",
+    "--collect-all", "groovy",
     "--clean",
     "--noconfirm",
     "--distpath=./dist",
     "--workpath=./build",
 ]
 
-# Add version.txt if found
-if version_txt_path:
+# Add extra data files (version.txt from modules)
+for data in reversed(extra_data):
     args.insert(0, "--add-data")
-    args.insert(1, f"{version_txt_path};safehttpx")
+    args.insert(1, data)
+
+# Add hidden imports for modules with version.txt
+for mod_name in ["safehttpx", "groovy"]:
+    args.insert(0, f"{mod_name}")
+    args.insert(0, "--hidden-import")
 
 print("=" * 60)
 print("Building IDX Trading Journal...")
 print("=" * 60)
+print("Extra data files:", extra_data)
 print()
 
 PyInstaller.__main__.run(args)
