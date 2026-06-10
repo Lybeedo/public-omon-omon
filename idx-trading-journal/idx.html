@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI API Multi-Tester</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0e0; min-height: 100vh; padding: 20px; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 5px; color: #00d9ff; font-size: 22px; }
+        .subtitle { text-align: center; color: #666; margin-bottom: 20px; font-size: 13px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+        .card { background: #16213e; border-radius: 12px; padding: 16px; }
+        .card-title { font-size: 14px; font-weight: 700; margin-bottom: 12px; color: #fff; display: flex; align-items: center; gap: 8px; }
+        label { display: block; margin-bottom: 5px; font-size: 12px; font-weight: 600; color: #888; }
+        input, textarea, select { width: 100%; background: #0f0f23; border: 1px solid #2a2a4a; border-radius: 6px; padding: 9px 11px; color: #fff; font-size: 13px; margin-bottom: 10px; font-family: inherit; }
+        textarea { min-height: 70px; resize: vertical; }
+        .config-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        @media (max-width: 600px) { .config-row { grid-template-columns: 1fr; } }
+        .file-drop { border: 2px dashed #2a2a4a; border-radius: 6px; padding: 18px; text-align: center; cursor: pointer; transition: all 0.3s; position: relative; }
+        .file-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+        .drop-text { color: #555; font-size: 12px; }
+        .file-name { color: #4ade80; font-size: 12px; }
+        button { padding: 10px 16px; background: linear-gradient(135deg, #00d9ff, #0077b6); border: none; border-radius: 6px; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; width: 100%; }
+        button:hover { transform: scale(1.02); filter: brightness(1.1); }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .api-status { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
+        .status-dot.ok { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+        .status-dot.err { background: #f87171; }
+        .status-dot.wait { background: #fbbf24; }
+        .hint { font-size: 11px; color: #555; margin-bottom: 8px; }
+        #resultArea { margin-top: 16px; background: #16213e; border-radius: 12px; padding: 16px; }
+        .result-section { margin-bottom: 16px; }
+        .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .result-title { font-size: 13px; font-weight: 700; color: #fff; }
+        .result-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 700; }
+        .result-badge.pass { background: #1a4; color: #fff; }
+        .result-badge.fail { background: #c42; color: #fff; }
+        .result-badge.pending { background: #555; color: #fff; }
+        .result-text { background: #0a0a1a; border-radius: 6px; padding: 10px; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; color: #ccc; line-height: 1.5; }
+        .all-pass { background: linear-gradient(135deg, #1a4, #0a3); color: #fff; padding: 12px; border-radius: 8px; text-align: center; font-size: 15px; font-weight: 700; margin-top: 10px; }
+        .all-fail { background: linear-gradient(135deg, #c42, #a20); color: #fff; padding: 12px; border-radius: 8px; text-align: center; font-size: 15px; font-weight: 700; margin-top: 10px; }
+.info-banner { background: #1a1a3a; border: 1px solid #2a2a5a; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 12px; color: #888; }
+        .info-banner b { color: #00d9ff; }
+        .preview-img { max-width: 100%; max-height: 120px; border-radius: 6px; margin-top: 8px; display: none; }
+        .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0; }
+        .toggles label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 600; font-size: 12px; color: #888; }
+        .toggles input { width: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI API Multi-Tester</h1>
+        <p class="subtitle">Vision + Text analysis across official &amp; 9router APIs</p>
+        <div class="info-banner"><b>Quick Config:</b> Enter API keys below. Image upload works for all vision-capable providers. Click <b>Run All Tests</b> to test everything at once.</div>
+        <div class="grid">
+            <div class="card">
+                <div class="card-title">Official Providers</div>
+                <div class="config-row">
+                    <div><label>Claude (Anthropic)</label><input type="text" id="claudeKey" placeholder="sk-ant-..."></div>
+                    <div><label>Gemini (Google)</label><input type="text" id="geminiKey" placeholder="AIza..."></div>
+                    <div><label>Google Model</label><input type="text" id="geminiModel" placeholder="gemma-4-26b-a4b-it" value="gemma-4-26b-a4b-it"></div>
+                </div>
+                <div class="config-row">
+                    <div><label>Minimax API Key</label><input type="text" id="minimaxKey" placeholder="Minimax key" ></div>
+                    <div><label>Minimax Base URL</label><input type="text" id="minimaxBase" placeholder="https://api.minimax.io" value="https://api.minimax.io/v1/text/chatcompletion_v2"></div>
+                </div>
+                <div class="config-row">
+                    <div><label>Minimax Model</label><input type="text" id="minimaxModel" placeholder="MiniMax-M2.7" value="MiniMax-M2.7"></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">9router (OpenCode Go)</div>
+                <div class="config-row">
+                    <div><label>9router URL</label><input type="text" id="routerUrl" placeholder="http://localhost:20128" ></div>
+                    <div><label>9router API Key</label><input type="text" id="routerKey" placeholder=""></div>
+                    <div><label>9router Model</label><input type="text" id="routerModel" placeholder="Model name" value=""></div>
+                </div>
+                <button onclick="checkRouterHealth()" style="background:#1a1a3a; margin-bottom: 10px; border: 1px solid #2a2a4a;">Check Status</button>
+                <div id="routerStatus" class="api-status"><div class="status-dot wait" id="rDot"></div><span id="rStatus">Not checked</span></div>
+                <div class="hint">9router: /v1/models, /v1/chat/completions, /v1/messages (Anthropic)</div>
+            </div>
+        </div>
+        <br>
+        <div class="grid">
+            <div class="card">
+                <div class="card-title">Test Input</div>
+                <div class="file-drop" id="dropZone"><input type="file" id="fileInput" accept="image/*" onchange="handleFile(this)"><span id="dropText" class="drop-text">Drop image or click to upload</span><img id="preview" class="preview-img" alt="Preview"></div>
+                <label style="margin-top: 10px;">System Prompt</label>
+                <textarea id="systemPrompt" placeholder="Optional system instructions..."></textarea>
+                <label>User Prompt</label>
+                <textarea id="userPrompt" placeholder="Question about the image...">Describe the above image and said Hallo</textarea>
+                <div class="hint">Leave image empty to test text-only responses</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Run Tests</div>
+                <div class="hint" style="margin-bottom: 10px;">Select which tests to run:</div>
+<div class="toggles">
+                    <label><input type="checkbox" id="tClaude" checked> Claude</label>
+                    <label><input type="checkbox" id="tGemini" checked> Gemini</label>
+                    <label><input type="checkbox" id="tMiniMax" checked> Minimax</label>
+                    <label><input type="checkbox" id="t9router" checked> 9router</label>
+                </div>
+                <button onclick="runAllTests()" id="runBtn">Run All Tests</button>
+                <button onclick="runAllTests()" id="runBtnLoading" style="display: none;" disabled>Testing...</button>
+                <div id="resultArea"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+    let uploadedImageData = null;
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#00d9ff'; });
+    dropZone.addEventListener('dragleave', () => dropZone.style.borderColor = '');
+    dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.style.borderColor = ''; document.getElementById('fileInput').files = e.dataTransfer.files; handleFile(document.getElementById('fileInput')); });
+
+    function handleFile(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+            uploadedImageData = e.target.result;
+            document.getElementById('preview').src = uploadedImageData;
+            document.getElementById('preview').style.display = 'block';
+            document.getElementById('dropText').innerHTML = '<span class="file-name">' + file.name + '</span>';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function checkRouterHealth() {
+        const url = document.getElementById('routerUrl').value;
+        const dot = document.getElementById('rDot');
+        const status = document.getElementById('rStatus');
+        dot.className = 'status-dot wait';
+        status.textContent = 'Checking...';
+        try {
+            const res = await fetch(url + '/api/health', { signal: AbortSignal.timeout(5000) });
+            if (res.ok) {
+                dot.className = 'status-dot ok';
+                status.textContent = 'Online';
+            } else {
+                dot.className = 'status-dot err';
+                status.textContent = 'Down: HTTP ' + res.status;
+            }
+        } catch(e) {
+            dot.className = 'status-dot err';
+            status.textContent = 'Down: ' + e.message;
+        }
+    }
+
+    function setResult(id, status, text) {
+        const badge = document.getElementById('badge-' + id);
+        const textEl = document.getElementById('text-' + id);
+        if (badge) {
+            badge.className = 'result-badge ' + (status === 'pass' ? 'pass' : status === 'fail' ? 'fail' : 'pending');
+            badge.textContent = status === 'pass' ? 'PASS' : status === 'fail' ? 'FAIL' : '...';
+        }
+        if (textEl && text) {
+            textEl.textContent = text.length > 600 ? text.substring(0, 600) + '...' : text;
+        }
+    }
+
+    async function testClaude() {
+        const key = document.getElementById('claudeKey').value.trim();
+        if (!key) { setResult('claude', 'fail', 'No API key'); return; }
+        const user = document.getElementById('userPrompt').value || 'Reply with "Claude OK"';
+        const cont = uploadedImageData
+            ? [
+                { type: 'text', text: user },
+                { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: uploadedImageData.split(',')[1] } }
+              ]
+            : user;
+        try {
+            const r = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': key,
+                    'anthropic-version': '2023-06-01'
+                },
+body: JSON.stringify({ model: 'claude-sonnet-4-7', messages: [{ role: 'user', content: cont }], max_tokens: 200 })
+            });
+            const raw = await r.text();
+            let d;
+            try { d = JSON.parse(raw); } catch { setResult('claude', 'fail', 'HTTP ' + r.status + ': ' + raw.substring(0, 300)); return; }
+            if (!r.ok) {
+                const err = (d.error && d.error.message) || JSON.stringify(d).substring(0, 200);
+                setResult('claude', 'fail', 'HTTP ' + r.status + ': ' + err);
+                return;
+            }
+            const text = d.content && d.content[0] ? d.content[0].text : null;
+            setResult('claude', text ? 'pass' : 'fail', text || JSON.stringify(d).substring(0, 200));
+        } catch(e) {
+            setResult('claude', 'fail', e.message);
+        }
+    }
+
+    async function testGemini() {
+        const key = document.getElementById('geminiKey').value.trim();
+        if (!key) { setResult('gemini', 'fail', 'No API key'); return; }
+        const model = document.getElementById('geminiModel').value.trim() || 'gemma-4-26b-a4b-it';
+        const user = document.getElementById('userPrompt').value || 'Reply with "Gemini OK"';
+        const parts = uploadedImageData
+            ? [{ text: user }, { inlineData: { mimeType: 'image/jpeg', data: uploadedImageData.split(',')[1] } }]
+            : [{ text: user }];
+        try {
+            const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + key, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: 200 } })
+            });
+            const raw = await r.text();
+            let d;
+            try { d = JSON.parse(raw); } catch { setResult('gemini', 'fail', 'HTTP ' + r.status + ': ' + raw.substring(0, 300)); return; }
+            if (!r.ok) {
+                const err = (d.error && d.error.message) || (d.error && d.error.code) || JSON.stringify(d).substring(0, 200);
+                setResult('gemini', 'fail', 'HTTP ' + r.status + ': ' + err);
+                return;
+            }
+            const text = d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts ? d.candidates[0].content.parts[0].text : null;
+            setResult('gemini', text ? 'pass' : 'fail', text || JSON.stringify(d).substring(0, 200));
+        } catch(e) {
+            setResult('gemini', 'fail', e.message);
+        }
+    }
+
+    async function testMiniMax() {
+        const key = document.getElementById('minimaxKey').value.trim();
+        const base = document.getElementById('minimaxBase').value.trim() || 'https://api.minimax.io/v1/text/chatcompletion_v2';
+        const model = document.getElementById('minimaxModel').value.trim() || 'MiniMax-M2.7';
+        if (!key) { setResult('minimax', 'fail', 'No API key'); return; }
+        const user = document.getElementById('userPrompt').value || 'Reply with "Minimax OK"';
+        const cont = uploadedImageData
+            ? [{ type: 'text', text: user }, { type: 'image_url', image_url: { url: uploadedImageData } }]
+            : user;
+        try {
+            const r = await fetch(base, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + key
+                },
+                body: JSON.stringify({ model: model, messages: [{ role: 'user', content: cont }], max_tokens: 200 })
+            });
+            const raw = await r.text();
+            let d;
+            try { d = JSON.parse(raw); } catch { setResult('minimax', 'fail', 'HTTP ' + r.status + ': ' + raw.substring(0, 300)); return; }
+            if (!r.ok) {
+                const err = (d.error && d.error.message) || (d.base_resp && d.base_resp.status_msg) || JSON.stringify(d).substring(0, 200);
+                setResult('minimax', 'fail', 'HTTP ' + r.status + ': ' + err);
+                return;
+            }
+const msg = d.choices && d.choices[0] ? d.choices[0].message : {};
+            // Minimax puts actual content in reasoning_content when content is empty
+            const text = msg.content && msg.content.trim() ? msg.content : (msg.reasoning_content || '').trim();
+            setResult('minimax', text ? 'pass' : 'fail', text || JSON.stringify(d).substring(0, 200));
+        } catch(e) {
+            setResult('minimax', 'fail', e.message);
+        }
+    }
+
+    async function test9router() {
+        const url = document.getElementById('routerUrl').value.trim();
+        const key = document.getElementById('routerKey').value.trim();
+        if (!url) { setResult('9router', 'fail', 'No URL'); return; }
+
+        const hdrs = { 'Content-Type': 'application/json' };
+        if (key) hdrs['Authorization'] = 'Bearer ' + key;
+
+        const user = document.getElementById('userPrompt').value || 'Reply with "9router OK"';
+
+        try {
+            let msgs, mdl, ept;
+
+            if (uploadedImageData) {
+                msgs = [{ role: 'user', content: [{ type: 'text', text: user }, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: uploadedImageData.split(',')[1] } }] }];
+                mdl = 'cc/minimax-v2.7-v1';
+                ept = url + '/v1/messages';
+                hdrs['anthropic-version'] = '2023-06-01';
+            } else {
+                msgs = [{ role: 'user', content: user }];
+                mdl = 'openai/glm-4-flash';
+                ept = url + '/v1/chat/completions';
+            }
+
+            const r = await fetch(ept, { method: 'POST', headers: hdrs, body: JSON.stringify({ model: mdl, messages: msgs, max_tokens: 200 }), signal: AbortSignal.timeout(15000) });
+
+            const raw = await r.text();
+            let d;
+            try {
+                d = JSON.parse(raw);
+            } catch(parseErr) {
+                setResult('9router', 'fail', 'Not JSON (HTTP ' + r.status + '): ' + raw.substring(0, 300));
+                return;
+            }
+
+            if (!r.ok) {
+                const errMsg = (d.error && d.error.message) || (d.error && d.error.type) || JSON.stringify(d).substring(0, 200);
+                setResult('9router', 'fail', 'HTTP ' + r.status + ': ' + errMsg);
+                return;
+            }
+
+            // Parse based on which endpoint was used
+            let ok = null;
+            if (ept.includes('/v1/messages')) {
+                ok = d.content && d.content[0] && d.content[0].text ? d.content[0].text : null;
+            } else {
+                ok = d.choices && d.choices[0] && d.choices[0].message ? d.choices[0].message.content : null;
+            }
+
+            setResult('9router', ok ? 'pass' : 'fail', ok || JSON.stringify(d).substring(0, 200));
+        } catch(e) {
+            setResult('9router', 'fail', e.message);
+        }
+    }
+
+    async function runAllTests() {
+        const runBtn = document.getElementById('runBtn');
+        const runBtnLoading = document.getElementById('runBtnLoading');
+        runBtn.style.display = 'none';
+        runBtnLoading.style.display = 'block';
+
+        document.getElementById('resultArea').innerHTML = `
+            <div class="result-section">
+                <div class="result-header"><div class="result-title">Claude</div><span class="result-badge pending" id="badge-claude">...</span></div>
+                <div class="result-text" id="text-claude">Testing...</div>
+            </div>
+            <div class="result-section">
+                <div class="result-header"><div class="result-title">Gemini</div><span class="result-badge pending" id="badge-gemini">...</span></div>
+                <div class="result-text" id="text-gemini">Testing...</div>
+            </div>
+            <div class="result-section">
+                <div class="result-header"><div class="result-title">Minimax</div><span class="result-badge pending" id="badge-minimax">...</span></div>
+                <div class="result-text" id="text-minimax">Testing...</div>
+            </div>
+            <div class="result-section">
+<div class="result-header"><div class="result-title">9router</div><span class="result-badge pending" id="badge-9router">...</span></div>
+                <div class="result-text" id="text-9router">Testing...</div>
+            </div>
+            <div id="summaryArea"></div>`;
+
+        const ps = [];
+        if (document.getElementById('tClaude').checked) ps.push(testClaude());
+        if (document.getElementById('tGemini').checked) ps.push(testGemini());
+        if (document.getElementById('tMiniMax').checked) ps.push(testMiniMax());
+        if (document.getElementById('t9router').checked) ps.push(test9router());
+
+        await Promise.allSettled(ps);
+
+        const pass = ['claude','gemini','minimax','9router'].filter(id => document.getElementById('badge-' + id).textContent === 'PASS').length;
+        const fail = ['claude','gemini','minimax','9router'].filter(id => document.getElementById('badge-' + id).textContent === 'FAIL').length;
+
+        const s = document.getElementById('summaryArea');
+        if (fail === 0) {
+            s.className = 'all-pass';
+            s.textContent = 'All ' + pass + ' tests passed!';
+        } else if (pass === 0) {
+            s.className = 'all-fail';
+            s.textContent = 'All ' + fail + ' tests failed';
+        } else {
+            s.style.cssText = 'background:#2a2a4a;color:#fbbf24;padding:12px;border-radius:8px;text-align:center;font-size:15px;font-weight:700;margin-top:10px;';
+            s.textContent = pass + ' passed, ' + fail + ' failed';
+        }
+
+        runBtn.style.display = 'block';
+        runBtnLoading.style.display = 'none';
+    }
+
+    setTimeout(checkRouterHealth, 500);
+    </script>
+</body>
+</html>
