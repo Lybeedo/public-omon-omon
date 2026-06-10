@@ -1,375 +1,531 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI API Multi-Tester</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0e0; min-height: 100vh; padding: 20px; }
-        .container { max-width: 1100px; margin: 0 auto; }
-        h1 { text-align: center; margin-bottom: 5px; color: #00d9ff; font-size: 22px; }
-        .subtitle { text-align: center; color: #666; margin-bottom: 20px; font-size: 13px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-        @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
-        .card { background: #16213e; border-radius: 12px; padding: 16px; }
-        .card-title { font-size: 14px; font-weight: 700; margin-bottom: 12px; color: #fff; display: flex; align-items: center; gap: 8px; }
-        label { display: block; margin-bottom: 5px; font-size: 12px; font-weight: 600; color: #888; }
-        input, textarea, select { width: 100%; background: #0f0f23; border: 1px solid #2a2a4a; border-radius: 6px; padding: 9px 11px; color: #fff; font-size: 13px; margin-bottom: 10px; font-family: inherit; }
-        textarea { min-height: 70px; resize: vertical; }
-        .config-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        @media (max-width: 600px) { .config-row { grid-template-columns: 1fr; } }
-        .file-drop { border: 2px dashed #2a2a4a; border-radius: 6px; padding: 18px; text-align: center; cursor: pointer; transition: all 0.3s; position: relative; }
-        .file-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-        .drop-text { color: #555; font-size: 12px; }
-        .file-name { color: #4ade80; font-size: 12px; }
-        button { padding: 10px 16px; background: linear-gradient(135deg, #00d9ff, #0077b6); border: none; border-radius: 6px; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; width: 100%; }
-        button:hover { transform: scale(1.02); filter: brightness(1.1); }
-        button:disabled { opacity: 0.4; cursor: not-allowed; }
-        .api-status { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
-        .status-dot.ok { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
-        .status-dot.err { background: #f87171; }
-        .status-dot.wait { background: #fbbf24; }
-        .hint { font-size: 11px; color: #555; margin-bottom: 8px; }
-        #resultArea { margin-top: 16px; background: #16213e; border-radius: 12px; padding: 16px; }
-        .result-section { margin-bottom: 16px; }
-        .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-        .result-title { font-size: 13px; font-weight: 700; color: #fff; }
-        .result-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 700; }
-        .result-badge.pass { background: #1a4; color: #fff; }
-        .result-badge.fail { background: #c42; color: #fff; }
-        .result-badge.pending { background: #555; color: #fff; }
-        .result-text { background: #0a0a1a; border-radius: 6px; padding: 10px; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; color: #ccc; line-height: 1.5; }
-        .all-pass { background: linear-gradient(135deg, #1a4, #0a3); color: #fff; padding: 12px; border-radius: 8px; text-align: center; font-size: 15px; font-weight: 700; margin-top: 10px; }
-        .all-fail { background: linear-gradient(135deg, #c42, #a20); color: #fff; padding: 12px; border-radius: 8px; text-align: center; font-size: 15px; font-weight: 700; margin-top: 10px; }
-.info-banner { background: #1a1a3a; border: 1px solid #2a2a5a; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 12px; color: #888; }
-        .info-banner b { color: #00d9ff; }
-        .preview-img { max-width: 100%; max-height: 120px; border-radius: 6px; margin-top: 8px; display: none; }
-        .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0; }
-        .toggles label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 600; font-size: 12px; color: #888; }
-        .toggles input { width: auto; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IDX Trading Journal — AI Powered</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8f9fa; color: #333; min-height: 100vh; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 20px; }
+  header { text-align: center; margin-bottom: 20px; }
+  header h1 { font-size: 24px; color: #1a1a2e; margin-bottom: 4px; }
+  header p { font-size: 13px; color: #666; }
+
+  .tabs { display: flex; border-bottom: 2px solid #e0e0e0; margin-bottom: 16px; overflow-x: auto; }
+  .tab { padding: 10px 18px; cursor: pointer; border-bottom: 3px solid transparent; font-size: 14px; font-weight: 600; color: #666; white-space: nowrap; }
+  .tab.active { color: #2d6cdf; border-bottom-color: #2d6cdf; }
+  .tab:hover { color: #2d6cdf; }
+
+  .panel { display: none; background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .panel.active { display: block; }
+
+  .card { background: #fafbfc; border-radius: 8px; padding: 14px; margin-bottom: 12px; border: 1px solid #e8e8e8; }
+  .card h3 { font-size: 14px; margin-bottom: 10px; color: #444; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+
+  label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; margin-top: 8px; }
+  input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 13px; font-family: inherit; background: #fff; }
+  textarea { min-height: 60px; resize: vertical; }
+  input[type="password"] { font-family: monospace; }
+
+  .btn { display: inline-block; padding: 10px 20px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+  .btn-primary { background: #2d6cdf; color: #fff; }
+  .btn-secondary { background: #6c757d; color: #fff; }
+  .btn-success { background: #28a745; color: #fff; }
+  .btn:hover { opacity: 0.85; }
+  .btn-block { width: 100%; margin-top: 10px; }
+
+  .status { padding: 10px; border-radius: 6px; font-size: 13px; margin-top: 10px; }
+  .status.ok { background: #d4edda; color: #155724; }
+  .status.err { background: #f8d7da; color: #721c24; }
+  .status.warn { background: #fff3cd; color: #856404; }
+
+  .result-box { background: #f1f5f9; border-radius: 6px; padding: 12px; font-size: 13px; margin-top: 10px; white-space: pre-wrap; line-height: 1.5; }
+  .preview-img { max-width: 100%; max-height: 220px; border-radius: 6px; margin-top: 8px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+  th, td { padding: 8px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+  th { background: #f1f5f9; font-weight: 600; }
+  tr:hover { background: #f8f9fa; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-win { background: #d4edda; color: #155724; }
+  .badge-loss { background: #f8d7da; color: #721c24; }
+  .badge-buy { background: #dbeafe; color: #1e40af; }
+  .badge-sell { background: #fce7f3; color: #9d174d; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
+  .stat-card { background: #f1f5f9; border-radius: 8px; padding: 14px; text-align: center; }
+  .stat-card .num { font-size: 22px; font-weight: 700; color: #1a1a2e; }
+  .stat-card .lbl { font-size: 11px; color: #666; margin-top: 2px; }
+
+  .hint { font-size: 12px; color: #888; margin-top: 8px; line-height: 1.5; }
+  .hint a { color: #2d6cdf; }
+
+  .footer { text-align: center; margin-top: 30px; font-size: 11px; color: #999; }
+
+  .hidden { display: none; }
+  .loading { opacity: 0.6; pointer-events: none; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>AI API Multi-Tester</h1>
-        <p class="subtitle">Vision + Text analysis across official &amp; 9router APIs</p>
-        <div class="info-banner"><b>Quick Config:</b> Enter API keys below. Image upload works for all vision-capable providers. Click <b>Run All Tests</b> to test everything at once.</div>
-        <div class="grid">
-            <div class="card">
-                <div class="card-title">Official Providers</div>
-                <div class="config-row">
-                    <div><label>Claude (Anthropic)</label><input type="text" id="claudeKey" placeholder="sk-ant-..."></div>
-                    <div><label>Gemini (Google)</label><input type="text" id="geminiKey" placeholder="AIza..."></div>
-                    <div><label>Google Model</label><input type="text" id="geminiModel" placeholder="gemma-4-26b-a4b-it" value="gemma-4-26b-a4b-it"></div>
-                </div>
-                <div class="config-row">
-                    <div><label>Minimax API Key</label><input type="text" id="minimaxKey" placeholder="Minimax key" ></div>
-                    <div><label>Minimax Base URL</label><input type="text" id="minimaxBase" placeholder="https://api.minimax.io" value="https://api.minimax.io/v1/text/chatcompletion_v2"></div>
-                </div>
-                <div class="config-row">
-                    <div><label>Minimax Model</label><input type="text" id="minimaxModel" placeholder="MiniMax-M2.7" value="MiniMax-M2.7"></div>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-title">9router (OpenCode Go)</div>
-                <div class="config-row">
-                    <div><label>9router URL</label><input type="text" id="routerUrl" placeholder="http://localhost:20128" ></div>
-                    <div><label>9router API Key</label><input type="text" id="routerKey" placeholder=""></div>
-                    <div><label>9router Model</label><input type="text" id="routerModel" placeholder="Model name" value=""></div>
-                </div>
-                <button onclick="checkRouterHealth()" style="background:#1a1a3a; margin-bottom: 10px; border: 1px solid #2a2a4a;">Check Status</button>
-                <div id="routerStatus" class="api-status"><div class="status-dot wait" id="rDot"></div><span id="rStatus">Not checked</span></div>
-                <div class="hint">9router: /v1/models, /v1/chat/completions, /v1/messages (Anthropic)</div>
-            </div>
-        </div>
-        <br>
-        <div class="grid">
-            <div class="card">
-                <div class="card-title">Test Input</div>
-                <div class="file-drop" id="dropZone"><input type="file" id="fileInput" accept="image/*" onchange="handleFile(this)"><span id="dropText" class="drop-text">Drop image or click to upload</span><img id="preview" class="preview-img" alt="Preview"></div>
-                <label style="margin-top: 10px;">System Prompt</label>
-                <textarea id="systemPrompt" placeholder="Optional system instructions..."></textarea>
-                <label>User Prompt</label>
-                <textarea id="userPrompt" placeholder="Question about the image...">Describe the above image and said Hallo</textarea>
-                <div class="hint">Leave image empty to test text-only responses</div>
-            </div>
-            <div class="card">
-                <div class="card-title">Run Tests</div>
-                <div class="hint" style="margin-bottom: 10px;">Select which tests to run:</div>
-<div class="toggles">
-                    <label><input type="checkbox" id="tClaude" checked> Claude</label>
-                    <label><input type="checkbox" id="tGemini" checked> Gemini</label>
-                    <label><input type="checkbox" id="tMiniMax" checked> Minimax</label>
-                    <label><input type="checkbox" id="t9router" checked> 9router</label>
-                </div>
-                <button onclick="runAllTests()" id="runBtn">Run All Tests</button>
-                <button onclick="runAllTests()" id="runBtnLoading" style="display: none;" disabled>Testing...</button>
-                <div id="resultArea"></div>
-            </div>
-        </div>
+<div class="wrap">
+  <header>
+    <h1>📈 IDX Trading Journal</h1>
+    <p>AI Powered Trading Journal for 🇮🇩 IDX | Google Gemini API (Gratis)</p>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="launch">🚀 Launch</div>
+    <div class="tab" data-tab="image">📸 Upload</div>
+    <div class="tab" data-tab="manual">📝 Manual</div>
+    <div class="tab" data-tab="history">📊 History</div>
+  </div>
+
+  <!-- LAUNCH TAB -->
+  <div class="panel active" id="panel-launch">
+    <div class="card">
+      <h3>🔑 Setup Gemini API Key</h3>
+      <label>API Key</label>
+      <input type="password" id="apiKey" placeholder="Paste API key dari Google AI Studio..." value="">
+      <label>Model</label>
+      <select id="modelSelect">
+        <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+        <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+        <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+        <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+        <option value="gemma-4-26b-a4b-it">gemma-4-26b-a4b-it</option>
+      </select>
+      <button class="btn btn-primary btn-block" id="btnLaunch">🚀 Launch App</button>
+      <div id="launchStatus" class="status" style="display:none;"></div>
     </div>
-    <script>
-    let uploadedImageData = null;
-    const dropZone = document.getElementById('dropZone');
-    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#00d9ff'; });
-    dropZone.addEventListener('dragleave', () => dropZone.style.borderColor = '');
-    dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.style.borderColor = ''; document.getElementById('fileInput').files = e.dataTransfer.files; handleFile(document.getElementById('fileInput')); });
+    <div class="hint">
+      <strong>📋 Cara Dapat API Key (Gratis):</strong><br>
+      1. Buka <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a><br>
+      2. Klik <strong>"Create API Key"</strong><br>
+      3. Copy key → Paste di atas → Klik <strong>Launch</strong><br>
+      4. Key auto-save ke browser (localStorage), sekali setup aja.
+    </div>
+  </div>
 
-    function handleFile(input) {
-        const file = input.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = e => {
-            uploadedImageData = e.target.result;
-            document.getElementById('preview').src = uploadedImageData;
-            document.getElementById('preview').style.display = 'block';
-            document.getElementById('dropText').innerHTML = '<span class="file-name">' + file.name + '</span>';
-        };
-        reader.readAsDataURL(file);
+  <!-- IMAGE TAB -->
+  <div class="panel" id="panel-image">
+    <div class="card">
+      <h3>📸 Upload Screenshot Chart / Trade</h3>
+      <div class="row">
+        <div>
+          <label>Upload Image</label>
+          <input type="file" id="imgInput" accept="image/*">
+          <img id="imgPreview" class="preview-img hidden" alt="Preview">
+          <label>Tanggal</label>
+          <input type="text" id="imgDate" placeholder="DD/MM/YYYY">
+          <label>Emosi</label>
+          <select id="imgEmotion">
+            <option>tenang</option><option>greedy</option><option>takut</option><option selected>netral</option><option>FOMO</option><option>yakin</option>
+          </select>
+          <label>Catatan</label>
+          <textarea id="imgNotes" placeholder="Catatan manual..."></textarea>
+          <button class="btn btn-primary btn-block" id="btnAnalyze">🚀 Analyze & Save</button>
+        </div>
+        <div>
+          <label>Status</label>
+          <div id="imgStatus" class="status" style="display:none;"></div>
+          <label>Data Terekstrak</label>
+          <div id="imgExtracted" class="result-box" style="display:none;"></div>
+          <label>🤖 AI Analysis</label>
+          <div id="imgAi" class="result-box" style="display:none;"></div>
+          <label>💡 Lesson</label>
+          <div id="imgLesson" class="result-box" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MANUAL TAB -->
+  <div class="panel" id="panel-manual">
+    <div class="card">
+      <h3>📝 Manual Entry</h3>
+      <div class="row">
+        <div>
+          <label>Symbol</label>
+          <input type="text" id="manSymbol" placeholder="BBRI, TLKM, etc.">
+          <label>Direction</label>
+          <select id="manDirection"><option>BUY</option><option>SELL</option></select>
+          <label>Entry Price</label>
+          <input type="number" id="manEntry" placeholder="0">
+          <label>Exit Price</label>
+          <input type="number" id="manExit" placeholder="0 = open">
+          <label>Stop Loss</label>
+          <input type="number" id="manSL" placeholder="0">
+          <label>Take Profit</label>
+          <input type="number" id="manTP" placeholder="0">
+        </div>
+        <div>
+          <label>Volume (lot)</label>
+          <input type="number" id="manVolume" value="1">
+          <label>P&L (Rp)</label>
+          <input type="number" id="manPnl" placeholder="0">
+          <label>Setup Type</label>
+          <select id="manSetup">
+            <option>breakout</option><option>pullback</option><option>reversal</option><option>trend following</option>
+            <option>support bounce</option><option>resistance rejection</option><option>news play</option><option>scalping</option>
+          </select>
+          <label>Emosi</label>
+          <select id="manEmotion">
+            <option>tenang</option><option>greedy</option><option>takut</option><option selected>netral</option><option>FOMO</option><option>yakin</option>
+          </select>
+          <label>Tanggal</label>
+          <input type="text" id="manDate" placeholder="DD/MM/YYYY">
+          <label>Catatan</label>
+          <textarea id="manNotes" placeholder="Catatan..."></textarea>
+          <button class="btn btn-success btn-block" id="btnSave">💾 Save & Analyze</button>
+        </div>
+      </div>
+      <div id="manStatus" class="status" style="display:none; margin-top:10px;"></div>
+      <div id="manSummary" class="result-box" style="display:none; margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div class="panel" id="panel-history">
+    <div class="card">
+      <h3>📊 History & Stats</h3>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="num" id="statTotal">0</div><div class="lbl">Total Trades</div></div>
+        <div class="stat-card"><div class="num" id="statWin">0%</div><div class="lbl">Win Rate</div></div>
+        <div class="stat-card"><div class="num" id="statPnl">Rp 0</div><div class="lbl">Total P&L</div></div>
+      </div>
+      <div style="margin-bottom:10px;">
+        <button class="btn btn-secondary" id="btnRefresh">🔄 Refresh</button>
+        <button class="btn btn-secondary" id="btnExport">📥 Export CSV</button>
+        <button class="btn btn-secondary" id="btnClear">🗑️ Clear All</button>
+      </div>
+      <div id="historyTableWrap" style="overflow-x:auto;">
+        <table id="historyTable">
+          <thead>
+            <tr>
+              <th>Tanggal</th><th>Symbol</th><th>Dir</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Setup</th><th>Score</th><th>R</th><th>Emosi</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="histStatus" class="status" style="display:none; margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    🔗 Powered by <strong>Google Gemini API</strong> (gratis) | 🇮🇩 Khusus saham IDX | No grid, no martingale
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   IDX Trading Journal — Client-Side (Blogger Ready)
+   ============================================================ */
+
+const STORAGE_KEY = 'idx_trading_journal_v1';
+const API_KEY_KEY = 'idx_gemini_api_key';
+const MODEL_KEY   = 'idx_gemini_model';
+
+/* ── Tabs ── */
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+  });
+});
+
+/* ── Helpers ── */
+function loadCfg() {
+  return { key: localStorage.getItem(API_KEY_KEY) || '', model: localStorage.getItem(MODEL_KEY) || 'gemini-2.5-flash' };
+}
+function saveCfg(key, model) {
+  localStorage.setItem(API_KEY_KEY, key);
+  localStorage.setItem(MODEL_KEY, model);
+}
+function loadTrades() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
+}
+function saveTrades(arr) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+}
+function fmtDate(d) {
+  const now = d ? new Date(d) : new Date();
+  const z = n => n.toString().padStart(2,'0');
+  return `${z(now.getDate())}/${z(now.getMonth()+1)}/${now.getFullYear()}`;
+}
+function fmtNum(n) {
+  return new Intl.NumberFormat('id-ID').format(n || 0);
+}
+function calcPnL(entry, exit, dir) {
+  if (!entry || !exit) return 0;
+  const e = parseFloat(entry), x = parseFloat(exit);
+  return dir === 'BUY' ? ((x - e) / e * 100).toFixed(2) : ((e - x) / e * 100).toFixed(2);
+}
+function calcR(entry, sl, tp, dir) {
+  const e = parseFloat(entry), s = parseFloat(sl), t = parseFloat(tp);
+  if (!e || !s || !t) return '-';
+  const risk = dir === 'BUY' ? e - s : s - e;
+  const reward = dir === 'BUY' ? t - e : e - t;
+  return risk === 0 ? '-' : (reward / risk).toFixed(2);
+}
+function setStatus(el, text, type) {
+  el.style.display = 'block';
+  el.className = 'status ' + (type || 'ok');
+  el.textContent = text;
+}
+
+/* ── Populate defaults ── */
+document.getElementById('imgDate').value = fmtDate();
+document.getElementById('manDate').value = fmtDate();
+const cfg = loadCfg();
+if (cfg.key) document.getElementById('apiKey').value = cfg.key;
+if (cfg.model) document.getElementById('modelSelect').value = cfg.model;
+
+/* ── Launch ── */
+document.getElementById('btnLaunch').addEventListener('click', async () => {
+  const key = document.getElementById('apiKey').value.trim();
+  const model = document.getElementById('modelSelect').value;
+  if (!key) { setStatus(document.getElementById('launchStatus'), '🔴 API Key kosong', 'err'); return; }
+  saveCfg(key, model);
+  const st = document.getElementById('launchStatus');
+  st.style.display = 'block'; st.className = 'status'; st.textContent = '🔍 Testing API...';
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'Reply with "OK"' }] }], generationConfig: { maxOutputTokens: 10 } })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error((d.error && d.error.message) || r.status);
+    setStatus(st, `✅ App Launched! Model: ${model} | API connected`, 'ok');
+  } catch (e) {
+    setStatus(st, `❌ ${e.message}`, 'err');
+  }
+});
+
+/* ── Image Upload ── */
+let imgB64 = '';
+document.getElementById('imgInput').addEventListener('change', function() {
+  const file = this.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => { imgB64 = e.target.result; document.getElementById('imgPreview').src = imgB64; document.getElementById('imgPreview').classList.remove('hidden'); };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('btnAnalyze').addEventListener('click', async () => {
+  const cfg = loadCfg();
+  if (!cfg.key) { setStatus(document.getElementById('imgStatus'), '🔴 API key belum di-set. Tab 🚀 Launch dulu.', 'err'); return; }
+  if (!imgB64) { setStatus(document.getElementById('imgStatus'), '🔴 Upload image dulu.', 'err'); return; }
+  const st = document.getElementById('imgStatus');
+  setStatus(st, '🔍 AI analyzing image...', 'warn');
+  const btn = document.getElementById('btnAnalyze'); btn.classList.add('loading');
+  try {
+    const base64 = imgB64.split(',')[1];
+    const prompt = `Kamu asisten jurnal trading profesional untuk saham Indonesia (IDX). Analisis screenshot ini dan ekstrak data dalam format:
+SYMBOL: [kode saham .JK]
+DIRECTION: [BUY/SELL]
+ENTRY: [harga]
+EXIT: [harga]
+SL: [stop loss]
+TP: [take profit]
+VOLUME: [lot]
+PNL: [profit/loss Rp]
+SETUP_TYPE: [breakout/pullback/reversal/trend following/support bounce/resistance rejection/news play/scalping]
+ANALISIS: [evaluasi singkat]
+LESSON: [pelajaran]
+DISCIPLINE_SCORE: [1-10]
+R_RATIO: [risk/reward]`;
+    const parts = [{ text: prompt }, { inlineData: { mimeType: 'image/png', data: base64.slice(0, 500000) } }];
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.key}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: 1024 } })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error((d.error && d.error.message) || `HTTP ${r.status}`);
+    const text = d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts ? d.candidates[0].content.parts[0].text : '';
+    const data = parseImageResponse(text);
+    document.getElementById('imgExtracted').style.display = 'block';
+    document.getElementById('imgExtracted').textContent = formatExtracted(data);
+    document.getElementById('imgAi').style.display = 'block';
+    document.getElementById('imgAi').textContent = data.ai_analysis || '-';
+    document.getElementById('imgLesson').style.display = 'block';
+    document.getElementById('imgLesson').textContent = data.ai_lessons || '-';
+    setStatus(st, '✅ Trade tersimpan!', 'ok');
+    const row = buildRow(data, document.getElementById('imgDate').value, document.getElementById('imgEmotion').value, document.getElementById('imgNotes').value);
+    const trades = loadTrades(); trades.push(row); saveTrades(trades);
+  } catch (e) {
+    setStatus(st, `❌ ${e.message}`, 'err');
+  } finally {
+    btn.classList.remove('loading');
+  }
+});
+
+function parseImageResponse(text) {
+  const data = {};
+  text.split('\n').forEach(line => {
+    if (line.includes(':')) {
+      const [k, v] = line.split(':', 2);
+      data[k.trim().toLowerCase()] = v.trim();
     }
+  });
+  return data;
+}
+function formatExtracted(data) {
+  return `Symbol: ${data.symbol || 'N/A'}\nDirection: ${data.direction || 'N/A'}\nEntry: ${data.entry || 'N/A'}\nExit: ${data.exit || 'N/A'}\nSL: ${data.sl || 'N/A'}\nTP: ${data.tp || 'N/A'}\nVolume: ${data.volume || 'N/A'}\nP&L: ${data.pnl || 'N/A'}\nSetup: ${data.setup_type || 'N/A'}`;
+}
+function buildRow(data, date, emotion, notes) {
+  const entry = parseFloat(data.entry || 0);
+  const exit = parseFloat(data.exit || 0);
+  const dir = (data.direction || 'BUY').toUpperCase();
+  const pnl = parseFloat(data.pnl || 0);
+  return {
+    timestamp: new Date().toISOString(), date: date || fmtDate(),
+    symbol: (data.symbol || '').toUpperCase().replace(/\.JK$/, '') + '.JK',
+    direction: dir, entry: entry || '', exit: exit || '', sl: data.sl || '', tp: data.tp || '',
+    volume: data.volume || 1, pnl: pnl, pnl_percent: calcPnL(entry, exit, dir),
+    setup_type: data.setup_type || 'breakout', emotion: emotion || 'netral',
+    discipline_score: data.discipline_score || '5',
+    r_ratio: data.r_ratio || calcR(entry, data.sl, data.tp, dir),
+    ai_analysis: data.ai_analysis || '', ai_lessons: data.ai_lessons || '', manual_notes: notes || ''
+  };
+}
 
-    async function checkRouterHealth() {
-        const url = document.getElementById('routerUrl').value;
-        const dot = document.getElementById('rDot');
-        const status = document.getElementById('rStatus');
-        dot.className = 'status-dot wait';
-        status.textContent = 'Checking...';
-        try {
-            const res = await fetch(url + '/api/health', { signal: AbortSignal.timeout(5000) });
-            if (res.ok) {
-                dot.className = 'status-dot ok';
-                status.textContent = 'Online';
-            } else {
-                dot.className = 'status-dot err';
-                status.textContent = 'Down: HTTP ' + res.status;
-            }
-        } catch(e) {
-            dot.className = 'status-dot err';
-            status.textContent = 'Down: ' + e.message;
-        }
-    }
+/* ── Manual Entry ── */
+document.getElementById('btnSave').addEventListener('click', async () => {
+  const cfg = loadCfg();
+  if (!cfg.key) { setStatus(document.getElementById('manStatus'), '🔴 API key belum di-set. Tab 🚀 Launch dulu.', 'err'); return; }
+  const symbol = document.getElementById('manSymbol').value.trim();
+  if (!symbol) { setStatus(document.getElementById('manStatus'), '🔴 Symbol wajib diisi.', 'err'); return; }
+  const entry = parseFloat(document.getElementById('manEntry').value || 0);
+  const exit = parseFloat(document.getElementById('manExit').value || 0);
+  const sl = parseFloat(document.getElementById('manSL').value || 0);
+  const tp = parseFloat(document.getElementById('manTP').value || 0);
+  const pnl = parseFloat(document.getElementById('manPnl').value || 0);
+  const dir = document.getElementById('manDirection').value;
+  const vol = document.getElementById('manVolume').value || 1;
+  const setup = document.getElementById('manSetup').value;
+  const emotion = document.getElementById('manEmotion').value;
+  const date = document.getElementById('manDate').value;
+  const notes = document.getElementById('manNotes').value;
+  const btn = document.getElementById('btnSave'); btn.classList.add('loading');
+  const st = document.getElementById('manStatus');
+  setStatus(st, '🔍 AI analyzing...', 'warn');
+  try {
+    const prompt = `Kamu mentor trading profesional. Evaluasi trade ini:
+Symbol: ${symbol}.JK
+Direction: ${dir}
+Entry: ${entry}
+Exit: ${exit}
+SL: ${sl}
+TP: ${tp}
+P&L: ${pnl}
+Setup: ${setup}
+Emosi: ${emotion}
+Notes: ${notes}
 
-    function setResult(id, status, text) {
-        const badge = document.getElementById('badge-' + id);
-        const textEl = document.getElementById('text-' + id);
-        if (badge) {
-            badge.className = 'result-badge ' + (status === 'pass' ? 'pass' : status === 'fail' ? 'fail' : 'pending');
-            badge.textContent = status === 'pass' ? 'PASS' : status === 'fail' ? 'FAIL' : '...';
-        }
-        if (textEl && text) {
-            textEl.textContent = text.length > 600 ? text.substring(0, 600) + '...' : text;
-        }
-    }
+Berikan format:
+ANALISIS: [evaluasi singkat]
+LESSON: [pelajaran]
+DISCIPLINE_SCORE: [1-10]
+R_RATIO: [risk/reward]`;
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.key}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 1024 } })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error((d.error && d.error.message) || `HTTP ${r.status}`);
+    const text = d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts ? d.candidates[0].content.parts[0].text : '';
+    const ai = parseImageResponse(text);
+    const row = {
+      timestamp: new Date().toISOString(), date: date || fmtDate(),
+      symbol: symbol.toUpperCase().replace(/\.JK$/, '') + '.JK',
+      direction: dir, entry: entry || '', exit: exit || '', sl: sl || '', tp: tp || '',
+      volume: vol, pnl: pnl, pnl_percent: calcPnL(entry, exit, dir),
+      setup_type: setup, emotion: emotion,
+      discipline_score: ai.discipline_score || '5',
+      r_ratio: ai.r_ratio || calcR(entry, sl, tp, dir),
+      ai_analysis: ai.ai_analysis || '', ai_lessons: ai.ai_lessons || '', manual_notes: notes
+    };
+    const trades = loadTrades(); trades.push(row); saveTrades(trades);
+    setStatus(st, '✅ Trade tersimpan!', 'ok');
+    document.getElementById('manSummary').style.display = 'block';
+    document.getElementById('manSummary').textContent = `✅ Saved!\n📊 Discipline Score: ${row.discipline_score}/10\n📈 R-Ratio: ${row.r_ratio}\n🤖 ${row.ai_analysis || '-'}\n💡 ${row.ai_lessons || '-'}`;
+  } catch (e) {
+    setStatus(st, `❌ ${e.message}`, 'err');
+  } finally {
+    btn.classList.remove('loading');
+  }
+});
 
-    async function testClaude() {
-        const key = document.getElementById('claudeKey').value.trim();
-        if (!key) { setResult('claude', 'fail', 'No API key'); return; }
-        const user = document.getElementById('userPrompt').value || 'Reply with "Claude OK"';
-        const cont = uploadedImageData
-            ? [
-                { type: 'text', text: user },
-                { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: uploadedImageData.split(',')[1] } }
-              ]
-            : user;
-        try {
-            const r = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': key,
-                    'anthropic-version': '2023-06-01'
-                },
-body: JSON.stringify({ model: 'claude-sonnet-4-7', messages: [{ role: 'user', content: cont }], max_tokens: 200 })
-            });
-            const raw = await r.text();
-            let d;
-            try { d = JSON.parse(raw); } catch { setResult('claude', 'fail', 'HTTP ' + r.status + ': ' + raw.substring(0, 300)); return; }
-            if (!r.ok) {
-                const err = (d.error && d.error.message) || JSON.stringify(d).substring(0, 200);
-                setResult('claude', 'fail', 'HTTP ' + r.status + ': ' + err);
-                return;
-            }
-            const text = d.content && d.content[0] ? d.content[0].text : null;
-            setResult('claude', text ? 'pass' : 'fail', text || JSON.stringify(d).substring(0, 200));
-        } catch(e) {
-            setResult('claude', 'fail', e.message);
-        }
-    }
+/* ── History ── */
+function renderHistory() {
+  const trades = loadTrades();
+  const tbody = document.querySelector('#historyTable tbody');
+  tbody.innerHTML = '';
+  let wins = 0, losses = 0, totalPnl = 0;
+  trades.slice().reverse().forEach(t => {
+    const pnl = parseFloat(t.pnl || 0);
+    if (pnl > 0) wins++; else if (pnl < 0) losses++;
+    totalPnl += pnl;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${t.date}</td>
+      <td>${t.symbol}</td>
+      <td><span class="badge ${t.direction === 'BUY' ? 'badge-buy' : 'badge-sell'}">${t.direction}</span></td>
+      <td>${t.entry}</td>
+      <td>${t.exit || '-'}</td>
+      <td><span class="badge ${pnl >= 0 ? 'badge-win' : 'badge-loss'}">${fmtNum(pnl)}</span></td>
+      <td>${t.setup_type}</td>
+      <td>${t.discipline_score}</td>
+      <td>${t.r_ratio}</td>
+      <td>${t.emotion}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  const total = trades.length;
+  const wr = total ? Math.round((wins / total) * 100) : 0;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statWin').textContent = wr + '%';
+  document.getElementById('statPnl').textContent = 'Rp ' + fmtNum(totalPnl);
+}
 
-    async function testGemini() {
-        const key = document.getElementById('geminiKey').value.trim();
-        if (!key) { setResult('gemini', 'fail', 'No API key'); return; }
-        const model = document.getElementById('geminiModel').value.trim() || 'gemma-4-26b-a4b-it';
-        const user = document.getElementById('userPrompt').value || 'Reply with "Gemini OK"';
-        const parts = uploadedImageData
-            ? [{ text: user }, { inlineData: { mimeType: 'image/jpeg', data: uploadedImageData.split(',')[1] } }]
-            : [{ text: user }];
-        try {
-            const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + key, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: 200 } })
-            });
-            const raw = await r.text();
-            let d;
-            try { d = JSON.parse(raw); } catch { setResult('gemini', 'fail', 'HTTP ' + r.status + ': ' + raw.substring(0, 300)); return; }
-            if (!r.ok) {
-                const err = (d.error && d.error.message) || (d.error && d.error.code) || JSON.stringify(d).substring(0, 200);
-                setResult('gemini', 'fail', 'HTTP ' + r.status + ': ' + err);
-                return;
-            }
-            const text = d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts ? d.candidates[0].content.parts[0].text : null;
-            setResult('gemini', text ? 'pass' : 'fail', text || JSON.stringify(d).substring(0, 200));
-        } catch(e) {
-            setResult('gemini', 'fail', e.message);
-        }
-    }
+document.getElementById('btnRefresh').addEventListener('click', () => {
+  renderHistory();
+  setStatus(document.getElementById('histStatus'), '✅ Data refreshed', 'ok');
+});
 
-    async function testMiniMax() {
-        const key = document.getElementById('minimaxKey').value.trim();
-        const base = document.getElementById('minimaxBase').value.trim() || 'https://api.minimax.io/v1/text/chatcompletion_v2';
-        const model = document.getElementById('minimaxModel').value.trim() || 'MiniMax-M2.7';
-        if (!key) { setResult('minimax', 'fail', 'No API key'); return; }
-        const user = document.getElementById('userPrompt').value || 'Reply with "Minimax OK"';
-        const cont = uploadedImageData
-            ? [{ type: 'text', text: user }, { type: 'image_url', image_url: { url: uploadedImageData } }]
-            : user;
-        try {
-            const r = await fetch(base, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + key
-                },
-                body: JSON.stringify({ model: model, messages: [{ role: 'user', content: cont }], max_tokens: 200 })
-            });
-            const raw = await r.text();
-            let d;
-            try { d = JSON.parse(raw); } catch { setResult('minimax', 'fail', 'HTTP ' + r.status + ': ' + raw.substring(0, 300)); return; }
-            if (!r.ok) {
-                const err = (d.error && d.error.message) || (d.base_resp && d.base_resp.status_msg) || JSON.stringify(d).substring(0, 200);
-                setResult('minimax', 'fail', 'HTTP ' + r.status + ': ' + err);
-                return;
-            }
-const msg = d.choices && d.choices[0] ? d.choices[0].message : {};
-            // Minimax puts actual content in reasoning_content when content is empty
-            const text = msg.content && msg.content.trim() ? msg.content : (msg.reasoning_content || '').trim();
-            setResult('minimax', text ? 'pass' : 'fail', text || JSON.stringify(d).substring(0, 200));
-        } catch(e) {
-            setResult('minimax', 'fail', e.message);
-        }
-    }
+document.getElementById('btnExport').addEventListener('click', () => {
+  const trades = loadTrades();
+  if (!trades.length) { setStatus(document.getElementById('histStatus'), '❌ Belum ada data', 'err'); return; }
+  const headers = ['timestamp','date','symbol','direction','entry','exit','sl','tp','volume','pnl','pnl_percent','setup_type','emotion','discipline_score','r_ratio','ai_analysis','ai_lessons','manual_notes'];
+  const csv = [headers.join(',')];
+  trades.forEach(t => {
+    csv.push(headers.map(h => {
+      const v = (t[h] || '').toString().replace(/"/g, '""');
+      return v.includes(',') ? `"${v}"` : v;
+    }).join(','));
+  });
+  const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `idx_trading_journal_${fmtDate().replace(/\//g,'-')}.csv`;
+  a.click();
+  setStatus(document.getElementById('histStatus'), '✅ CSV exported!', 'ok');
+});
 
-    async function test9router() {
-        const url = document.getElementById('routerUrl').value.trim();
-        const key = document.getElementById('routerKey').value.trim();
-        if (!url) { setResult('9router', 'fail', 'No URL'); return; }
+document.getElementById('btnClear').addEventListener('click', () => {
+  if (!confirm('Yakin mau hapus semua data?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  renderHistory();
+  setStatus(document.getElementById('histStatus'), '✅ All data cleared', 'ok');
+});
 
-        const hdrs = { 'Content-Type': 'application/json' };
-        if (key) hdrs['Authorization'] = 'Bearer ' + key;
-
-        const user = document.getElementById('userPrompt').value || 'Reply with "9router OK"';
-
-        try {
-            let msgs, mdl, ept;
-
-            if (uploadedImageData) {
-                msgs = [{ role: 'user', content: [{ type: 'text', text: user }, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: uploadedImageData.split(',')[1] } }] }];
-                mdl = 'cc/minimax-v2.7-v1';
-                ept = url + '/v1/messages';
-                hdrs['anthropic-version'] = '2023-06-01';
-            } else {
-                msgs = [{ role: 'user', content: user }];
-                mdl = 'openai/glm-4-flash';
-                ept = url + '/v1/chat/completions';
-            }
-
-            const r = await fetch(ept, { method: 'POST', headers: hdrs, body: JSON.stringify({ model: mdl, messages: msgs, max_tokens: 200 }), signal: AbortSignal.timeout(15000) });
-
-            const raw = await r.text();
-            let d;
-            try {
-                d = JSON.parse(raw);
-            } catch(parseErr) {
-                setResult('9router', 'fail', 'Not JSON (HTTP ' + r.status + '): ' + raw.substring(0, 300));
-                return;
-            }
-
-            if (!r.ok) {
-                const errMsg = (d.error && d.error.message) || (d.error && d.error.type) || JSON.stringify(d).substring(0, 200);
-                setResult('9router', 'fail', 'HTTP ' + r.status + ': ' + errMsg);
-                return;
-            }
-
-            // Parse based on which endpoint was used
-            let ok = null;
-            if (ept.includes('/v1/messages')) {
-                ok = d.content && d.content[0] && d.content[0].text ? d.content[0].text : null;
-            } else {
-                ok = d.choices && d.choices[0] && d.choices[0].message ? d.choices[0].message.content : null;
-            }
-
-            setResult('9router', ok ? 'pass' : 'fail', ok || JSON.stringify(d).substring(0, 200));
-        } catch(e) {
-            setResult('9router', 'fail', e.message);
-        }
-    }
-
-    async function runAllTests() {
-        const runBtn = document.getElementById('runBtn');
-        const runBtnLoading = document.getElementById('runBtnLoading');
-        runBtn.style.display = 'none';
-        runBtnLoading.style.display = 'block';
-
-        document.getElementById('resultArea').innerHTML = `
-            <div class="result-section">
-                <div class="result-header"><div class="result-title">Claude</div><span class="result-badge pending" id="badge-claude">...</span></div>
-                <div class="result-text" id="text-claude">Testing...</div>
-            </div>
-            <div class="result-section">
-                <div class="result-header"><div class="result-title">Gemini</div><span class="result-badge pending" id="badge-gemini">...</span></div>
-                <div class="result-text" id="text-gemini">Testing...</div>
-            </div>
-            <div class="result-section">
-                <div class="result-header"><div class="result-title">Minimax</div><span class="result-badge pending" id="badge-minimax">...</span></div>
-                <div class="result-text" id="text-minimax">Testing...</div>
-            </div>
-            <div class="result-section">
-<div class="result-header"><div class="result-title">9router</div><span class="result-badge pending" id="badge-9router">...</span></div>
-                <div class="result-text" id="text-9router">Testing...</div>
-            </div>
-            <div id="summaryArea"></div>`;
-
-        const ps = [];
-        if (document.getElementById('tClaude').checked) ps.push(testClaude());
-        if (document.getElementById('tGemini').checked) ps.push(testGemini());
-        if (document.getElementById('tMiniMax').checked) ps.push(testMiniMax());
-        if (document.getElementById('t9router').checked) ps.push(test9router());
-
-        await Promise.allSettled(ps);
-
-        const pass = ['claude','gemini','minimax','9router'].filter(id => document.getElementById('badge-' + id).textContent === 'PASS').length;
-        const fail = ['claude','gemini','minimax','9router'].filter(id => document.getElementById('badge-' + id).textContent === 'FAIL').length;
-
-        const s = document.getElementById('summaryArea');
-        if (fail === 0) {
-            s.className = 'all-pass';
-            s.textContent = 'All ' + pass + ' tests passed!';
-        } else if (pass === 0) {
-            s.className = 'all-fail';
-            s.textContent = 'All ' + fail + ' tests failed';
-        } else {
-            s.style.cssText = 'background:#2a2a4a;color:#fbbf24;padding:12px;border-radius:8px;text-align:center;font-size:15px;font-weight:700;margin-top:10px;';
-            s.textContent = pass + ' passed, ' + fail + ' failed';
-        }
-
-        runBtn.style.display = 'block';
-        runBtnLoading.style.display = 'none';
-    }
-
-    setTimeout(checkRouterHealth, 500);
-    </script>
+// Auto-render on load
+renderHistory();
+</script>
 </body>
 </html>
