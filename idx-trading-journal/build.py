@@ -6,6 +6,8 @@ Output: dist/IDX_Trading_Journal/
 import sys
 import os
 import subprocess
+import importlib
+import pkgutil
 
 # Ensure PyInstaller is installed
 try:
@@ -14,6 +16,19 @@ except ImportError:
     print("Installing PyInstaller...")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller>=6.0"])
     import PyInstaller.__main__
+
+# Discover safehttpx module path and version.txt
+safehttpx_path = None
+version_txt_path = None
+try:
+    import safehttpx
+    safehttpx_path = os.path.dirname(safehttpx.__file__)
+    version_txt = os.path.join(safehttpx_path, "version.txt")
+    if os.path.exists(version_txt):
+        version_txt_path = version_txt
+        print(f"Found safehttpx version.txt: {version_txt_path}")
+except Exception as e:
+    print(f"Could not find safehttpx: {e}")
 
 # Build args
 args = [
@@ -45,6 +60,7 @@ args = [
     "--hidden-import", "pydantic",
     "--hidden-import", "pydantic.v1",
     "--hidden-import", "anyio._backends._asyncio",
+    "--hidden-import", "safehttpx",
     "--collect-all", "gradio",
     "--collect-all", "gradio_client",
     "--collect-all", "fastapi",
@@ -55,11 +71,17 @@ args = [
     "--collect-all", "httpx",
     "--collect-all", "httptools",
     "--collect-all", "websockets",
+    "--collect-all", "safehttpx",
     "--clean",
     "--noconfirm",
     "--distpath=./dist",
     "--workpath=./build",
 ]
+
+# Add version.txt if found
+if version_txt_path:
+    args.insert(0, "--add-data")
+    args.insert(1, f"{version_txt_path};safehttpx")
 
 print("=" * 60)
 print("Building IDX Trading Journal...")
