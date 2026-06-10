@@ -460,39 +460,67 @@ def build_ui():
         Upload screenshot chart, input manual, atau PDF report broker.
         """)
 
-        # ── API KEY INPUT ──
-        with gr.Row():
-            with gr.Column(scale=3):
-                api_key_input = gr.Textbox(
-                    label="🔑 Gemini API Key",
-                    placeholder="Paste API key dari Google AI Studio...",
-                    type="password",
-                    value=load_config().get("gemini_api_key", ""),
-                    show_copy_button=True,
-                )
-            with gr.Column(scale=1):
-                api_key_status = gr.Textbox(
-                    label="Status",
-                    value=get_api_key_status()[0],
-                    interactive=False,
-                )
-            with gr.Column(scale=1):
-                api_key_btn = gr.Button("💾 Save API Key", variant="primary")
+        with gr.Tabs():
+            # ── TAB 1: LAUNCH / SETUP ──
+            with gr.TabItem("🚀 Launch"):
+                gr.Markdown("""
+                ## 🔑 Setup API Key
+                Masukkan API key dari [Google AI Studio](https://aistudio.google.com/app/apikey) untuk aktifkan fitur AI.
+                Key gratis, gak perlu kartu kredit.
+                """)
+
+                with gr.Row():
+                    with gr.Column(scale=3):
+                        api_key_input = gr.Textbox(
+                            label="🔑 Gemini API Key",
+                            placeholder="Paste API key dari Google AI Studio...",
+                            type="password",
+                            value=load_config().get("gemini_api_key", ""),
+                            show_copy_button=True,
+                        )
+                    with gr.Column(scale=1):
+                        api_key_status = gr.Textbox(
+                            label="Status",
+                            value=get_api_key_status()[0],
+                            interactive=False,
+                        )
+
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        api_key_btn = gr.Button("🚀 Launch App", variant="primary")
+                    with gr.Column(scale=3):
+                        launch_result = gr.Textbox(
+                            label="Result",
+                            interactive=False,
+                            value="Klik Launch untuk aktifkan AI...",
+                        )
+
                 api_key_btn.click(
                     set_api_key,
                     inputs=[api_key_input],
                     outputs=[api_key_status, api_key_input],
+                ).then(
+                    lambda status: f"✅ App launched! {status}" if "🟢" in status else f"❌ {status}",
+                    inputs=[api_key_status],
+                    outputs=[launch_result],
                 )
+
                 # Auto-load status on startup
                 demo.load(
                     get_api_key_status,
                     outputs=[api_key_status, api_key_input],
                 )
 
-        gr.Markdown("---")
+                gr.Markdown("""
+                ---
+                ### 📋 Cara Dapat API Key (Gratis):
+                1. Buka [Google AI Studio](https://aistudio.google.com/app/apikey)
+                2. Klik **"Create API Key"**
+                3. Copy key → Paste di atas → Klik **Launch**
+                4. Key auto-save ke `config.json`, sekali setup aja
+                """)
 
-        with gr.Tabs():
-            # ── TAB 1: IMAGE ──
+            # ── TAB 2: IMAGE ──
             with gr.TabItem("📸 Upload Image"):
                 gr.Markdown("Upload screenshot chart atau trade dari broker. AI akan ekstrak data otomatis.")
 
@@ -517,7 +545,7 @@ def build_ui():
                     outputs=[status_img, extracted_img, json_preview, ai_analysis_img, ai_lessons_img]
                 )
 
-            # ── TAB 2: MANUAL ──
+            # ── TAB 3: MANUAL ──
             with gr.TabItem("📝 Manual Entry"):
                 gr.Markdown("Input data trade secara manual. AI akan memberikan reasoning dan evaluasi.")
 
@@ -551,7 +579,7 @@ def build_ui():
                     outputs=[status_man, summary_man, ai_analysis_man, ai_lessons_man]
                 )
 
-            # ── TAB 3: PDF ──
+            # ── TAB 4: PDF ──
             with gr.TabItem("📄 PDF Report"):
                 gr.Markdown("Upload PDF trade report dari broker. AI akan ekstrak semua trade.")
                 pdf_input = gr.File(label="Upload PDF", file_types=[".pdf"])
@@ -560,7 +588,7 @@ def build_ui():
 
                 btn_pdf.click(handle_pdf_upload, inputs=[pdf_input], outputs=[pdf_output])
 
-            # ── TAB 4: HISTORY ──
+            # ── TAB 5: HISTORY ──
             with gr.TabItem("📊 History & Stats"):
                 gr.Markdown("Lihat semua trade dan statistik.")
 
