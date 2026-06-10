@@ -1,7 +1,8 @@
 @echo off
 chcp 65001 >nul
-echo 🚀 IDX Trading Journal - AI Powered
+echo 🚀 IDX Trading Journal - Web UI (Gradio)
 echo =========================================
+echo.
 
 :: Check Python
 python --version >nul 2>&1
@@ -19,10 +20,11 @@ if not exist "venv\Scripts\python.exe" (
 
 :: Install deps
 echo 📦 Install dependencies...
-venv\Scripts\pip install -q google-generativeai pillow pandas
+venv\Scripts\pip install -q -r requirements.txt
 
-:: Run
+:: Launch Web UI
+echo 🔗 Buka browser: http://localhost:7860
 echo.
-venv\Scripts\python trading_journal.py
+venv\Scripts\python app.py
 
 pause
