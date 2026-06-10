@@ -13,6 +13,7 @@ import sys
 import json
 import csv
 import shutil
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Dict
@@ -296,7 +297,7 @@ def handle_image_upload(image, date, emotion, notes):
         return "❌ Upload image dulu", "", {}, "", ""
 
     # Save image
-    temp_path = f"/tmp/gradio_upload_{datetime.now().strftime('%Y%m%d%H%M%S')}.png"
+    temp_path = os.path.join(tempfile.gettempdir(), f"gradio_upload_{datetime.now().strftime('%Y%m%d%H%M%S')}.png")
     image.save(temp_path)
     saved_path = save_upload(temp_path)
 
