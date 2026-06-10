@@ -453,7 +453,7 @@ def refresh_history():
 # ───────────────────────────────────────────────
 
 def build_ui():
-    with gr.Blocks(title="IDX Trading Journal", theme=gr.themes.Soft()) as demo:
+    with gr.Blocks(title="IDX Trading Journal") as demo:
         gr.Markdown("""
         # 📈 IDX Trading Journal — AI Powered
         **Jurnal trading saham IDX dengan AI Google Gemini (gratis)**
@@ -476,7 +476,6 @@ def build_ui():
                             placeholder="Paste API key dari Google AI Studio...",
                             type="password",
                             value=load_config().get("gemini_api_key", ""),
-                            show_copy_button=True,
                         )
                     with gr.Column(scale=1):
                         api_key_status = gr.Textbox(
@@ -631,4 +630,5 @@ if __name__ == "__main__":
         server_port=7860,
         show_error=True,
         inbrowser=True,
+        theme=gr.themes.Soft(),
     )
