@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title> </title>
+<title>IDX Trading Journal — AI Powered</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8f9fa; color: #333; min-height: 100vh; }
-  .wrap { max-width: 900px; margin: 0 auto; padding: 20px; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 20px; }
   header { text-align: center; margin-bottom: 20px; }
   header h1 { font-size: 24px; color: #1a1a2e; margin-bottom: 4px; }
   header p { font-size: 13px; color: #666; }
 
   .tabs { display: flex; border-bottom: 2px solid #e0e0e0; margin-bottom: 16px; overflow-x: auto; }
-  .tab { padding: 10px 18px; cursor: pointer; border-bottom: 3px solid transparent; font-size: 14px; font-weight: 600; color: #666; white-space: nowrap; }
+  .tab { padding: 10px 22px; cursor: pointer; border-bottom: 3px solid transparent; font-size: 14px; font-weight: 600; color: #666; white-space: nowrap; }
   .tab.active { color: #2d6cdf; border-bottom-color: #2d6cdf; }
   .tab:hover { color: #2d6cdf; }
 
@@ -23,12 +23,15 @@
   .card { background: #fafbfc; border-radius: 8px; padding: 14px; margin-bottom: 12px; border: 1px solid #e8e8e8; }
   .card h3 { font-size: 14px; margin-bottom: 10px; color: #444; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+  @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .row3 { grid-template-columns: 1fr; } }
 
   label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; margin-top: 8px; }
   input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 13px; font-family: inherit; background: #fff; }
   textarea { min-height: 60px; resize: vertical; }
   input[type="password"] { font-family: monospace; }
+  input[type="file"] { padding: 6px; }
 
   .btn { display: inline-block; padding: 10px 20px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
   .btn-primary { background: #2d6cdf; color: #fff; }
@@ -36,6 +39,8 @@
   .btn-success { background: #28a745; color: #fff; }
   .btn:hover { opacity: 0.85; }
   .btn-block { width: 100%; margin-top: 10px; }
+  .btn-group { display: flex; gap: 8px; margin-bottom: 10px; }
+  .btn-group .btn { flex: 1; }
 
   .status { padding: 10px; border-radius: 6px; font-size: 13px; margin-top: 10px; }
   .status.ok { background: #d4edda; color: #155724; }
@@ -45,26 +50,40 @@
   .result-box { background: #f1f5f9; border-radius: 6px; padding: 12px; font-size: 13px; margin-top: 10px; white-space: pre-wrap; line-height: 1.5; }
   .preview-img { max-width: 100%; max-height: 220px; border-radius: 6px; margin-top: 8px; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
-  th, td { padding: 8px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+  .analysis-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
+  @media (max-width: 700px) { .analysis-grid { grid-template-columns: 1fr; } }
+  .analysis-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; }
+  .analysis-card h4 { font-size: 12px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .analysis-card .value { font-size: 14px; font-weight: 600; color: #1a1a2e; }
+  .analysis-card .value.bull { color: #28a745; }
+  .analysis-card .value.bear { color: #dc3545; }
+  .analysis-card .value.neutral { color: #6c757d; }
+  .confidence-bar { height: 8px; background: #e0e0e0; border-radius: 4px; margin-top: 6px; overflow: hidden; }
+  .confidence-bar .fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+  .confidence-bar .fill.high { background: #28a745; }
+  .confidence-bar .fill.mid { background: #ffc107; }
+  .confidence-bar .fill.low { background: #dc3545; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+  th, td { padding: 6px; text-align: left; border-bottom: 1px solid #e0e0e0; vertical-align: top; }
   th { background: #f1f5f9; font-weight: 600; }
   tr:hover { background: #f8f9fa; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  td.wrap { max-width: 200px; white-space: pre-wrap; line-height: 1.4; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; }
   .badge-win { background: #d4edda; color: #155724; }
   .badge-loss { background: #f8d7da; color: #721c24; }
   .badge-buy { background: #dbeafe; color: #1e40af; }
   .badge-sell { background: #fce7f3; color: #9d174d; }
 
-  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+  @media (max-width: 700px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
   .stat-card { background: #f1f5f9; border-radius: 8px; padding: 14px; text-align: center; }
-  .stat-card .num { font-size: 22px; font-weight: 700; color: #1a1a2e; }
+  .stat-card .num { font-size: 20px; font-weight: 700; color: #1a1a2e; }
   .stat-card .lbl { font-size: 11px; color: #666; margin-top: 2px; }
 
   .hint { font-size: 12px; color: #888; margin-top: 8px; line-height: 1.5; }
   .hint a { color: #2d6cdf; }
-
   .footer { text-align: center; margin-top: 30px; font-size: 11px; color: #999; }
-
   .hidden { display: none; }
   .loading { opacity: 0.6; pointer-events: none; }
 </style>
@@ -73,29 +92,29 @@
 <div class="wrap">
   <header>
     <h1>📈 IDX Trading Journal</h1>
-    <p>AI Powered Trading Journal for IDX | Google Gemini API</p>
+    <p>AI Technical Analysis for 🇮🇩 IDX Stocks | Google Gemini API</p>
   </header>
 
   <div class="tabs">
     <div class="tab active" data-tab="launch">🚀 Launch</div>
-    <div class="tab" data-tab="image">📸 Upload</div>
-    <div class="tab" data-tab="manual">📝 Manual</div>
-    <div class="tab" data-tab="history">📊 History</div>
+    <div class="tab" data-tab="chart">📊 Chart Analysis</div>
+    <div class="tab" data-tab="history">📈 History</div>
   </div>
 
-  <!-- LAUNCH TAB -->
+  <!-- ==================== LAUNCH TAB ==================== -->
   <div class="panel active" id="panel-launch">
     <div class="card">
-      <h3>🔑 Setup Gemini API Key</h3>
+      <h3>🔑 API Configuration</h3>
       <label>API Key</label>
-      <input type="password" id="apiKey" placeholder="Paste API key dari Google AI Studio..." value="">
+      <input type="password" id="apiKey" placeholder="Paste API key dari Google AI Studio...">
       <label>Model</label>
       <select id="modelSelect">
+        <option value="gemma-4-26b-a4b-it" selected>gemma-4-26b-a4b-it (default)</option>
+        <option value="gemma-4-31b-it">gemma-4-31b-it</option>
         <option value="gemini-2.5-flash">gemini-2.5-flash</option>
         <option value="gemini-2.5-pro">gemini-2.5-pro</option>
         <option value="gemini-2.0-flash">gemini-2.0-flash</option>
         <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-        <option value="gemma-4-26b-a4b-it">gemma-4-26b-a4b-it</option>
       </select>
       <button class="btn btn-primary btn-block" id="btnLaunch">🚀 Launch App</button>
       <div id="launchStatus" class="status" style="display:none;"></div>
@@ -105,98 +124,123 @@
       1. Buka <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a><br>
       2. Klik <strong>"Create API Key"</strong><br>
       3. Copy key → Paste di atas → Klik <strong>Launch</strong><br>
-      4. Key auto-save ke browser (localStorage), sekali setup aja.
+      4. Key & Model auto-save ke browser (localStorage), sekali setup aja.
     </div>
   </div>
 
-  <!-- IMAGE TAB -->
-  <div class="panel" id="panel-image">
+  <!-- ==================== CHART ANALYSIS TAB ==================== -->
+  <div class="panel" id="panel-chart">
     <div class="card">
-      <h3>📸 Upload Screenshot Chart / Trade</h3>
+      <h3>📊 Chart Analysis + Manual Entry</h3>
       <div class="row">
+        <!-- LEFT: Inputs -->
         <div>
-          <label>Upload Image</label>
-          <input type="file" id="imgInput" accept="image/*">
-          <img id="imgPreview" class="preview-img hidden" alt="Preview">
-          <label>Tanggal</label>
-          <input type="text" id="imgDate" placeholder="DD/MM/YYYY">
-          <label>Emosi</label>
-          <select id="imgEmotion">
-            <option>tenang</option><option>greedy</option><option>takut</option><option selected>netral</option><option>FOMO</option><option>yakin</option>
-          </select>
-          <label>Catatan</label>
-          <textarea id="imgNotes" placeholder="Catatan manual..."></textarea>
-          <button class="btn btn-primary btn-block" id="btnAnalyze">🚀 Analyze & Save</button>
-        </div>
-        <div>
-          <label>Status</label>
-          <div id="imgStatus" class="status" style="display:none;"></div>
-          <label>Data Terekstrak</label>
-          <div id="imgExtracted" class="result-box" style="display:none;"></div>
-          <label>🤖 AI Analysis</label>
-          <div id="imgAi" class="result-box" style="display:none;"></div>
-          <label>💡 Lesson</label>
-          <div id="imgLesson" class="result-box" style="display:none;"></div>
-        </div>
-      </div>
-    </div>
-  </div>
+          <label>📸 Upload Chart Screenshot (Opsional)</label>
+          <input type="file" id="chartInput" accept="image/*">
+          <img id="chartPreview" class="preview-img hidden" alt="Preview">
 
-  <!-- MANUAL TAB -->
-  <div class="panel" id="panel-manual">
-    <div class="card">
-      <h3>📝 Manual Entry</h3>
-      <div class="row">
-        <div>
           <label>Symbol</label>
-          <input type="text" id="manSymbol" placeholder="BBRI, TLKM, etc.">
+          <input type="text" id="chartSymbol" placeholder="BBCA, BBRI, TLKM, etc.">
           <label>Direction</label>
-          <select id="manDirection"><option>BUY</option><option>SELL</option></select>
+          <select id="chartDirection"><option>BUY</option><option>SELL</option></select>
           <label>Entry Price</label>
-          <input type="number" id="manEntry" placeholder="0">
+          <input type="number" id="chartEntry" placeholder="0">
           <label>Exit Price</label>
-          <input type="number" id="manExit" placeholder="0 = open">
+          <input type="number" id="chartExit" placeholder="0 = open">
           <label>Stop Loss</label>
-          <input type="number" id="manSL" placeholder="0">
+          <input type="number" id="chartSL" placeholder="0">
           <label>Take Profit</label>
-          <input type="number" id="manTP" placeholder="0">
+          <input type="number" id="chartTP" placeholder="0">
         </div>
         <div>
           <label>Volume (lot)</label>
-          <input type="number" id="manVolume" value="1">
+          <input type="number" id="chartVolume" value="1">
           <label>P&L (Rp)</label>
-          <input type="number" id="manPnl" placeholder="0">
+          <input type="number" id="chartPnl" placeholder="0">
           <label>Setup Type</label>
-          <select id="manSetup">
+          <select id="chartSetup">
             <option>breakout</option><option>pullback</option><option>reversal</option><option>trend following</option>
             <option>support bounce</option><option>resistance rejection</option><option>news play</option><option>scalping</option>
           </select>
           <label>Emosi</label>
-          <select id="manEmotion">
+          <select id="chartEmotion">
             <option>tenang</option><option>greedy</option><option>takut</option><option selected>netral</option><option>FOMO</option><option>yakin</option>
           </select>
           <label>Tanggal</label>
-          <input type="text" id="manDate" placeholder="DD/MM/YYYY">
+          <input type="text" id="chartDate" placeholder="DD/MM/YYYY">
           <label>Catatan</label>
-          <textarea id="manNotes" placeholder="Catatan..."></textarea>
-          <button class="btn btn-success btn-block" id="btnSave">💾 Save & Analyze</button>
+          <textarea id="chartNotes" placeholder="Catatan tambahan..."></textarea>
+          <button class="btn btn-primary btn-block" id="btnAnalyzeChart">🚀 Analyze & Save</button>
         </div>
       </div>
-      <div id="manStatus" class="status" style="display:none; margin-top:10px;"></div>
-      <div id="manSummary" class="result-box" style="display:none; margin-top:10px;"></div>
+      <div id="chartStatus" class="status" style="display:none; margin-top:10px;"></div>
+    </div>
+
+    <!-- AI RESULTS -->
+    <div class="card hidden" id="chartResultCard">
+      <h3>🤖 AI Technical Analysis</h3>
+      <div class="row3">
+        <div class="analysis-card">
+          <h4>Symbol</h4>
+          <div class="value" id="resSymbol">-</div>
+        </div>
+        <div class="analysis-card">
+          <h4>Trend</h4>
+          <div class="value" id="resTrend">-</div>
+        </div>
+        <div class="analysis-card">
+          <h4>Strength</h4>
+          <div class="value" id="resStrength">-</div>
+        </div>
+        <div class="analysis-card">
+          <h4>Market Structure</h4>
+          <div class="value" id="resStructure">-</div>
+        </div>
+        <div class="analysis-card">
+          <h4>Momentum</h4>
+          <div class="value" id="resMomentum">-</div>
+        </div>
+        <div class="analysis-card">
+          <h4>Scenario</h4>
+          <div class="value" id="resScenario">-</div>
+        </div>
+      </div>
+      <div class="analysis-grid" style="margin-top:10px;">
+        <div class="analysis-card">
+          <h4>Key Observations</h4>
+          <div class="value" id="resObservations" style="font-weight:400; font-size:12px;">-</div>
+        </div>
+        <div class="analysis-card">
+          <h4>Confidence</h4>
+          <div class="value" id="resConfidence">-</div>
+          <div class="confidence-bar"><div class="fill" id="resConfBar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:10px;">
+        <h4>🧠 Reasoning</h4>
+        <div class="result-box" id="resReasoning">-</div>
+      </div>
+      <div class="card" style="margin-top:10px;">
+        <h4>💡 Lesson</h4>
+        <div class="result-box" id="resLesson">-</div>
+      </div>
+      <div class="hint" style="margin-top:10px; font-size:11px;">
+        <strong>⚠️ Disclaimer:</strong> <span id="resDisclaimer">-</span>
+      </div>
     </div>
   </div>
 
-  <!-- HISTORY TAB -->
+  <!-- ==================== HISTORY TAB ==================== -->
   <div class="panel" id="panel-history">
     <div class="card">
-      <h3>📊 History & Stats</h3>
+      <h3>📈 History & Stats</h3>
       <div class="stats-grid">
         <div class="stat-card"><div class="num" id="statTotal">0</div><div class="lbl">Total Trades</div></div>
         <div class="stat-card"><div class="num" id="statWin">0%</div><div class="lbl">Win Rate</div></div>
+        <div class="stat-card"><div class="num" id="statLoss">0%</div><div class="lbl">Loss Rate</div></div>
         <div class="stat-card"><div class="num" id="statPnl">Rp 0</div><div class="lbl">Total P&L</div></div>
       </div>
-      <div style="margin-bottom:10px;">
+      <div class="btn-group">
         <button class="btn btn-secondary" id="btnRefresh">🔄 Refresh</button>
         <button class="btn btn-secondary" id="btnExport">📥 Export CSV</button>
         <button class="btn btn-secondary" id="btnClear">🗑️ Clear All</button>
@@ -205,7 +249,7 @@
         <table id="historyTable">
           <thead>
             <tr>
-              <th>Tanggal</th><th>Symbol</th><th>Dir</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Setup</th><th>Score</th><th>R</th><th>Emosi</th>
+              <th>Tanggal</th><th>Symbol</th><th>Dir</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Setup</th><th>Trend</th><th>Scenario</th><th>Conf</th><th>Score</th><th>Emosi</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -213,19 +257,38 @@
       </div>
       <div id="histStatus" class="status" style="display:none; margin-top:10px;"></div>
     </div>
+
+    <!-- AI Analysis in History -->
+    <div class="card" id="historyDetailCard" style="display:none;">
+      <h3>🧠 AI Analysis Detail</h3>
+      <div class="row">
+        <div>
+          <h4>Reasoning</h4>
+          <div class="result-box" id="histReasoning">-</div>
+        </div>
+        <div>
+          <h4>💡 Lesson</h4>
+          <div class="result-box" id="histLesson">-</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <h4>Key Observations</h4>
+        <div class="result-box" id="histObservations">-</div>
+      </div>
+    </div>
   </div>
 
   <div class="footer">
-    🔗 Powered by <strong>Google Gemini API | t.me/Lybeedo </strong>
+    🔗 Powered by Google Gemini API (gratis) | 🇮🇩 Khusus saham IDX | No grid, no martingale
   </div>
 </div>
 
 <script>
 /* ============================================================
-   IDX Trading Journal — Client-Side (Blogger Ready)
+   IDX Trading Journal — 3 Tab Version (Blogger Ready)
    ============================================================ */
 
-const STORAGE_KEY = 'idx_trading_journal_v1';
+const STORAGE_KEY = 'idx_trading_journal_v3';
 const API_KEY_KEY = 'idx_gemini_api_key';
 const MODEL_KEY   = 'idx_gemini_model';
 
@@ -241,7 +304,7 @@ document.querySelectorAll('.tab').forEach(t => {
 
 /* ── Helpers ── */
 function loadCfg() {
-  return { key: localStorage.getItem(API_KEY_KEY) || '', model: localStorage.getItem(MODEL_KEY) || 'gemini-2.5-flash' };
+  return { key: localStorage.getItem(API_KEY_KEY) || '', model: localStorage.getItem(MODEL_KEY) || 'gemma-4-26b-a4b-it' };
 }
 function saveCfg(key, model) {
   localStorage.setItem(API_KEY_KEY, key);
@@ -261,18 +324,6 @@ function fmtDate(d) {
 function fmtNum(n) {
   return new Intl.NumberFormat('id-ID').format(n || 0);
 }
-function calcPnL(entry, exit, dir) {
-  if (!entry || !exit) return 0;
-  const e = parseFloat(entry), x = parseFloat(exit);
-  return dir === 'BUY' ? ((x - e) / e * 100).toFixed(2) : ((e - x) / e * 100).toFixed(2);
-}
-function calcR(entry, sl, tp, dir) {
-  const e = parseFloat(entry), s = parseFloat(sl), t = parseFloat(tp);
-  if (!e || !s || !t) return '-';
-  const risk = dir === 'BUY' ? e - s : s - e;
-  const reward = dir === 'BUY' ? t - e : e - t;
-  return risk === 0 ? '-' : (reward / risk).toFixed(2);
-}
 function setStatus(el, text, type) {
   el.style.display = 'block';
   el.className = 'status ' + (type || 'ok');
@@ -280,8 +331,7 @@ function setStatus(el, text, type) {
 }
 
 /* ── Populate defaults ── */
-document.getElementById('imgDate').value = fmtDate();
-document.getElementById('manDate').value = fmtDate();
+document.getElementById('chartDate').value = fmtDate();
 const cfg = loadCfg();
 if (cfg.key) document.getElementById('apiKey').value = cfg.key;
 if (cfg.model) document.getElementById('modelSelect').value = cfg.model;
@@ -308,31 +358,44 @@ document.getElementById('btnLaunch').addEventListener('click', async () => {
 });
 
 /* ── Image Upload ── */
-let imgB64 = '';
-document.getElementById('imgInput').addEventListener('change', function() {
+let chartB64 = '';
+document.getElementById('chartInput').addEventListener('change', function() {
   const file = this.files[0]; if (!file) return;
   const reader = new FileReader();
-  reader.onload = e => { imgB64 = e.target.result; document.getElementById('imgPreview').src = imgB64; document.getElementById('imgPreview').classList.remove('hidden'); };
+  reader.onload = e => { chartB64 = e.target.result; document.getElementById('chartPreview').src = chartB64; document.getElementById('chartPreview').classList.remove('hidden'); };
   reader.readAsDataURL(file);
 });
 
-document.getElementById('btnAnalyze').addEventListener('click', async () => {
+/* ── Chart Analysis ── */
+document.getElementById('btnAnalyzeChart').addEventListener('click', async () => {
   const cfg = loadCfg();
-  if (!cfg.key) { setStatus(document.getElementById('imgStatus'), '🔴 API key belum di-set. Tab 🚀 Launch dulu.', 'err'); return; }
-  if (!imgB64) { setStatus(document.getElementById('imgStatus'), '🔴 Upload image dulu.', 'err'); return; }
-  const st = document.getElementById('imgStatus');
-  setStatus(st, '🔍 AI analyzing image...', 'warn');
-  const btn = document.getElementById('btnAnalyze'); btn.classList.add('loading');
+  if (!cfg.key) { setStatus(document.getElementById('chartStatus'), '🔴 API key belum di-set. Tab 🚀 Launch dulu.', 'err'); return; }
+
+  const symbol = document.getElementById('chartSymbol').value.trim();
+  const entry = document.getElementById('chartEntry').value || '';
+  const exit = document.getElementById('chartExit').value || '';
+  const sl = document.getElementById('chartSL').value || '';
+  const tp = document.getElementById('chartTP').value || '';
+  const pnl = document.getElementById('chartPnl').value || '';
+  const dir = document.getElementById('chartDirection').value;
+  const vol = document.getElementById('chartVolume').value || 1;
+  const setup = document.getElementById('chartSetup').value;
+  const emotion = document.getElementById('chartEmotion').value;
+  const date = document.getElementById('chartDate').value;
+  const notes = document.getElementById('chartNotes').value;
+
+  const st = document.getElementById('chartStatus');
+  const btn = document.getElementById('btnAnalyzeChart'); btn.classList.add('loading');
+  setStatus(st, '🔍 AI analyzing...', 'warn');
+
   try {
-    const base64 = imgB64.split(',')[1];
-    const prompt = `
-Kamu adalah analis teknikal saham Indonesia (IDX).
+    let prompt = `Kamu adalah analis teknikal saham Indonesia (IDX).
 
 Tugas:
 1. Observasi seluruh screenshot chart yang diberikan.
 2. Identifikasi aset/saham yang ditampilkan.
-3. Jika terdapat kode saham (contoh: BBCA, BBRI, TLKM), gunakan kode tersebut.
-4. Jika hanya terdapat nama perusahaan (contoh: Bank Central Asia, Bank Rakyat Indonesia), coba cocokkan dengan kode saham IDX yang paling mungkin.
+3. Jika terdapat kode saham, gunakan kode tersebut.
+4. Jika hanya terdapat nama perusahaan, coba cocokkan dengan kode saham IDX.
 5. Jika aset tidak dapat diidentifikasi dengan yakin, tulis UNKNOWN.
 6. Jangan mengarang data yang tidak terlihat pada chart.
 
@@ -346,164 +409,124 @@ TREND: [BULLISH / BEARISH / SIDEWAYS]
 TREND_STRENGTH: [WEAK / MODERATE / STRONG]
 
 MARKET_STRUCTURE:
-- Higher High Higher Low
-- Lower High Lower Low
-- Range Bound
-- Breakout
-- Breakdown
-- Unknown
+- Higher High Higher Low / Lower High Lower Low / Range Bound / Breakout / Breakdown / Unknown
 
 MOMENTUM:
-- Bullish Momentum
-- Bearish Momentum
-- Neutral
+- Bullish Momentum / Bearish Momentum / Neutral
 
 KEY_OBSERVATION:
-- Support area
-- Resistance area
-- Trendline
-- Volume behavior
-- Important pattern detected
+- [Support area, Resistance area, Trendline, Volume behavior, Pattern, dsb]
 
 POTENTIAL_SCENARIO:
-- Bullish Continuation
-- Bearish Continuation
-- Potential Reversal Up
-- Potential Reversal Down
-- Sideways Consolidation
-- Potential Breakout
-- Potential Breakdown
+- [Bullish Continuation / Bearish Continuation / Potential Reversal Up / Potential Reversal Down / Sideways Consolidation / Potential Breakout / Potential Breakdown]
 
-CONFIDENCE:
-[0-100]
+CONFIDENCE: [0-100]
 
 REASONING:
-[ringkasan singkat 3-5 poin mengenai alasan analisis]
+[ringkasan singkat 3-5 poin alasan analisis]
+
+LESSON:
+[1-2 pelajaran trading dari chart ini]
 
 DISCLAIMER:
-Analisis berdasarkan screenshot yang tersedia dan bukan rekomendasi investasi.
-`;
-    const parts = [{ text: prompt }, { inlineData: { mimeType: 'image/png', data: base64.slice(0, 500000) } }];
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.key}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: 1024 } })
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error((d.error && d.error.message) || `HTTP ${r.status}`);
-    const text = d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts ? d.candidates[0].content.parts[0].text : '';
-    const data = parseImageResponse(text);
-    document.getElementById('imgExtracted').style.display = 'block';
-    document.getElementById('imgExtracted').textContent = formatExtracted(data);
-    document.getElementById('imgAi').style.display = 'block';
-    document.getElementById('imgAi').textContent = data.ai_analysis || '-';
-    document.getElementById('imgLesson').style.display = 'block';
-    document.getElementById('imgLesson').textContent = data.ai_lessons || '-';
-    setStatus(st, '✅ Trade tersimpan!', 'ok');
-    const row = buildRow(data, document.getElementById('imgDate').value, document.getElementById('imgEmotion').value, document.getElementById('imgNotes').value);
-    const trades = loadTrades(); trades.push(row); saveTrades(trades);
-  } catch (e) {
-    setStatus(st, `❌ ${e.message}`, 'err');
-  } finally {
-    btn.classList.remove('loading');
-  }
-});
+Analisis berdasarkan screenshot yang tersedia dan bukan rekomendasi investasi.`;
 
-function parseImageResponse(text) {
-  const data = {};
-  text.split('\n').forEach(line => {
-    if (line.includes(':')) {
-      const [k, v] = line.split(':', 2);
-      data[k.trim().toLowerCase()] = v.trim();
+    // If manual data provided, add to prompt
+    if (symbol || entry || notes) {
+      prompt += `\n\nDATA TRADER MANUAL:\nSymbol: ${symbol}\nDirection: ${dir}\nEntry: ${entry}\nExit: ${exit}\nSL: ${sl}\nTP: ${tp}\nP&L: ${pnl}\nSetup: ${setup}\nEmosi: ${emotion}\nNotes: ${notes}\n\nGabungkan data manual dengan analisis teknikal dari chart.`;
     }
-  });
-  return data;
-}
-function formatExtracted(data) {
-  return `Symbol: ${data.symbol || 'N/A'}\nDirection: ${data.direction || 'N/A'}\nEntry: ${data.entry || 'N/A'}\nExit: ${data.exit || 'N/A'}\nSL: ${data.sl || 'N/A'}\nTP: ${data.tp || 'N/A'}\nVolume: ${data.volume || 'N/A'}\nP&L: ${data.pnl || 'N/A'}\nSetup: ${data.setup_type || 'N/A'}`;
-}
-function buildRow(data, date, emotion, notes) {
-  const entry = parseFloat(data.entry || 0);
-  const exit = parseFloat(data.exit || 0);
-  const dir = (data.direction || 'BUY').toUpperCase();
-  const pnl = parseFloat(data.pnl || 0);
-  return {
-    timestamp: new Date().toISOString(), date: date || fmtDate(),
-    symbol: (data.symbol || '').toUpperCase().replace(/\.JK$/, '') + '.JK',
-    direction: dir, entry: entry || '', exit: exit || '', sl: data.sl || '', tp: data.tp || '',
-    volume: data.volume || 1, pnl: pnl, pnl_percent: calcPnL(entry, exit, dir),
-    setup_type: data.setup_type || 'breakout', emotion: emotion || 'netral',
-    discipline_score: data.discipline_score || '5',
-    r_ratio: data.r_ratio || calcR(entry, data.sl, data.tp, dir),
-    ai_analysis: data.ai_analysis || '', ai_lessons: data.ai_lessons || '', manual_notes: notes || ''
-  };
-}
 
-/* ── Manual Entry ── */
-document.getElementById('btnSave').addEventListener('click', async () => {
-  const cfg = loadCfg();
-  if (!cfg.key) { setStatus(document.getElementById('manStatus'), '🔴 API key belum di-set. Tab 🚀 Launch dulu.', 'err'); return; }
-  const symbol = document.getElementById('manSymbol').value.trim();
-  if (!symbol) { setStatus(document.getElementById('manStatus'), '🔴 Symbol wajib diisi.', 'err'); return; }
-  const entry = parseFloat(document.getElementById('manEntry').value || 0);
-  const exit = parseFloat(document.getElementById('manExit').value || 0);
-  const sl = parseFloat(document.getElementById('manSL').value || 0);
-  const tp = parseFloat(document.getElementById('manTP').value || 0);
-  const pnl = parseFloat(document.getElementById('manPnl').value || 0);
-  const dir = document.getElementById('manDirection').value;
-  const vol = document.getElementById('manVolume').value || 1;
-  const setup = document.getElementById('manSetup').value;
-  const emotion = document.getElementById('manEmotion').value;
-  const date = document.getElementById('manDate').value;
-  const notes = document.getElementById('manNotes').value;
-  const btn = document.getElementById('btnSave'); btn.classList.add('loading');
-  const st = document.getElementById('manStatus');
-  setStatus(st, '🔍 AI analyzing...', 'warn');
-  try {
-    const prompt = `Kamu mentor trading profesional. Evaluasi trade ini:
-Symbol: ${symbol}.JK
-Direction: ${dir}
-Entry: ${entry}
-Exit: ${exit}
-SL: ${sl}
-TP: ${tp}
-P&L: ${pnl}
-Setup: ${setup}
-Emosi: ${emotion}
-Notes: ${notes}
+    const parts = [{ text: prompt }];
+    if (chartB64) {
+      parts.push({ inlineData: { mimeType: 'image/png', data: chartB64.split(',')[1].slice(0, 500000) } });
+    }
 
-Berikan format:
-ANALISIS: [evaluasi singkat]
-LESSON: [pelajaran]
-DISCIPLINE_SCORE: [1-10]
-R_RATIO: [risk/reward]`;
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.key}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 1024 } })
+      body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: 2048 } })
     });
     const d = await r.json();
     if (!r.ok) throw new Error((d.error && d.error.message) || `HTTP ${r.status}`);
     const text = d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts ? d.candidates[0].content.parts[0].text : '';
-    const ai = parseImageResponse(text);
+    const ai = parseAnalysis(text);
+
+    // Show results
+    document.getElementById('chartResultCard').classList.remove('hidden');
+    document.getElementById('resSymbol').textContent = ai.symbol || symbol || 'UNKNOWN';
+    document.getElementById('resTrend').textContent = ai.trend || '-';
+    document.getElementById('resTrend').className = 'value ' + (ai.trend === 'BULLISH' ? 'bull' : ai.trend === 'BEARISH' ? 'bear' : 'neutral');
+    document.getElementById('resStrength').textContent = ai.trend_strength || '-';
+    document.getElementById('resStructure').textContent = ai.market_structure || '-';
+    document.getElementById('resMomentum').textContent = ai.momentum || '-';
+    document.getElementById('resScenario').textContent = ai.potential_scenario || '-';
+    document.getElementById('resObservations').textContent = ai.key_observation || '-';
+    document.getElementById('resConfidence').textContent = (ai.confidence || '0') + '%';
+    const conf = parseInt(ai.confidence || 0);
+    const bar = document.getElementById('resConfBar');
+    bar.style.width = conf + '%';
+    bar.className = 'fill ' + (conf >= 70 ? 'high' : conf >= 40 ? 'mid' : 'low');
+    document.getElementById('resReasoning').textContent = ai.reasoning || '-';
+    document.getElementById('resLesson').textContent = ai.lesson || '-';
+    document.getElementById('resDisclaimer').textContent = ai.disclaimer || 'Analisis berdasarkan screenshot yang tersedia dan bukan rekomendasi investasi.';
+
+    setStatus(st, '✅ Analisis selesai! Tersimpan ke History.', 'ok');
+
+    // Save to history
     const row = {
-      timestamp: new Date().toISOString(), date: date || fmtDate(),
-      symbol: symbol.toUpperCase().replace(/\.JK$/, '') + '.JK',
-      direction: dir, entry: entry || '', exit: exit || '', sl: sl || '', tp: tp || '',
-      volume: vol, pnl: pnl, pnl_percent: calcPnL(entry, exit, dir),
+      timestamp: new Date().toISOString(),
+      date: date || fmtDate(),
+      symbol: (ai.symbol || symbol || 'UNKNOWN').toUpperCase().replace(/\.JK$/, '') + '.JK',
+      direction: dir,
+      entry: entry || '', exit: exit || '', sl: sl || '', tp: tp || '',
+      volume: vol, pnl: pnl || 0,
       setup_type: setup, emotion: emotion,
-      discipline_score: ai.discipline_score || '5',
-      r_ratio: ai.r_ratio || calcR(entry, sl, tp, dir),
-      ai_analysis: ai.ai_analysis || '', ai_lessons: ai.ai_lessons || '', manual_notes: notes
+      trend: ai.trend || '', trend_strength: ai.trend_strength || '',
+      market_structure: ai.market_structure || '', momentum: ai.momentum || '',
+      potential_scenario: ai.potential_scenario || '',
+      confidence: ai.confidence || '0',
+      key_observation: ai.key_observation || '',
+      reasoning: ai.reasoning || '',
+      lesson: ai.lesson || '',
+      disclaimer: ai.disclaimer || '',
+      manual_notes: notes
     };
     const trades = loadTrades(); trades.push(row); saveTrades(trades);
-    setStatus(st, '✅ Trade tersimpan!', 'ok');
-    document.getElementById('manSummary').style.display = 'block';
-    document.getElementById('manSummary').textContent = `✅ Saved!\n📊 Discipline Score: ${row.discipline_score}/10\n📈 R-Ratio: ${row.r_ratio}\n🤖 ${row.ai_analysis || '-'}\n💡 ${row.ai_lessons || '-'}`;
+    renderHistory();
+
   } catch (e) {
     setStatus(st, `❌ ${e.message}`, 'err');
   } finally {
     btn.classList.remove('loading');
   }
 });
+
+function parseAnalysis(text) {
+  const data = {};
+  const lines = text.split('\n');
+  let currentKey = '';
+  lines.forEach(line => {
+    const clean = line.trim();
+    if (!clean) return;
+    if (clean.includes(':')) {
+      const idx = clean.indexOf(':');
+      const k = clean.substring(0, idx).trim().toLowerCase().replace(/\s+/g, '_');
+      const v = clean.substring(idx + 1).trim();
+      data[k] = v;
+      currentKey = k;
+    } else if (clean.startsWith('-') && currentKey) {
+      const v = clean.substring(1).trim();
+      data[currentKey] = (data[currentKey] || '') + '\n• ' + v;
+    } else if (currentKey) {
+      data[currentKey] = (data[currentKey] || '') + ' ' + clean;
+    }
+  });
+  // Also capture lesson from text
+  if (!data.lesson && text.includes('LESSON:')) {
+    const m = text.match(/LESSON:\s*([^\n]+(?:\n(?!\w+:)[^\n]*)*)/i);
+    if (m) data.lesson = m[1].trim();
+  }
+  return data;
+}
 
 /* ── History ── */
 function renderHistory() {
@@ -511,30 +534,45 @@ function renderHistory() {
   const tbody = document.querySelector('#historyTable tbody');
   tbody.innerHTML = '';
   let wins = 0, losses = 0, totalPnl = 0;
-  trades.slice().reverse().forEach(t => {
+  trades.slice().reverse().forEach((t, idx) => {
     const pnl = parseFloat(t.pnl || 0);
     if (pnl > 0) wins++; else if (pnl < 0) losses++;
     totalPnl += pnl;
     const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
     tr.innerHTML = `
       <td>${t.date}</td>
       <td>${t.symbol}</td>
       <td><span class="badge ${t.direction === 'BUY' ? 'badge-buy' : 'badge-sell'}">${t.direction}</span></td>
-      <td>${t.entry}</td>
+      <td>${t.entry || '-'}</td>
       <td>${t.exit || '-'}</td>
       <td><span class="badge ${pnl >= 0 ? 'badge-win' : 'badge-loss'}">${fmtNum(pnl)}</span></td>
-      <td>${t.setup_type}</td>
-      <td>${t.discipline_score}</td>
-      <td>${t.r_ratio}</td>
+      <td>${t.setup_type || '-'}</td>
+      <td>${t.trend || '-'}</td>
+      <td>${t.potential_scenario || '-'}</td>
+      <td>${t.confidence || '0'}%</td>
+      <td>${t.discipline_score || '-'}</td>
       <td>${t.emotion}</td>
     `;
+    tr.addEventListener('click', () => showDetail(t));
     tbody.appendChild(tr);
   });
   const total = trades.length;
   const wr = total ? Math.round((wins / total) * 100) : 0;
+  const lr = total ? Math.round((losses / total) * 100) : 0;
   document.getElementById('statTotal').textContent = total;
   document.getElementById('statWin').textContent = wr + '%';
+  document.getElementById('statLoss').textContent = lr + '%';
   document.getElementById('statPnl').textContent = 'Rp ' + fmtNum(totalPnl);
+}
+
+function showDetail(t) {
+  document.getElementById('historyDetailCard').style.display = 'block';
+  document.getElementById('histReasoning').textContent = t.reasoning || '-';
+  document.getElementById('histLesson').textContent = t.lesson || '-';
+  document.getElementById('histObservations').textContent = t.key_observation || '-';
+  // Scroll to detail
+  document.getElementById('historyDetailCard').scrollIntoView({ behavior: 'smooth' });
 }
 
 document.getElementById('btnRefresh').addEventListener('click', () => {
@@ -545,12 +583,12 @@ document.getElementById('btnRefresh').addEventListener('click', () => {
 document.getElementById('btnExport').addEventListener('click', () => {
   const trades = loadTrades();
   if (!trades.length) { setStatus(document.getElementById('histStatus'), '❌ Belum ada data', 'err'); return; }
-  const headers = ['timestamp','date','symbol','direction','entry','exit','sl','tp','volume','pnl','pnl_percent','setup_type','emotion','discipline_score','r_ratio','ai_analysis','ai_lessons','manual_notes'];
+  const headers = ['timestamp','date','symbol','direction','entry','exit','sl','tp','volume','pnl','setup_type','emotion','trend','trend_strength','market_structure','momentum','potential_scenario','confidence','key_observation','reasoning','lesson','disclaimer','manual_notes'];
   const csv = [headers.join(',')];
   trades.forEach(t => {
     csv.push(headers.map(h => {
       const v = (t[h] || '').toString().replace(/"/g, '""');
-      return v.includes(',') ? `"${v}"` : v;
+      return v.includes(',') || v.includes('\n') ? `"${v}"` : v;
     }).join(','));
   });
   const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
@@ -565,6 +603,7 @@ document.getElementById('btnClear').addEventListener('click', () => {
   if (!confirm('Yakin mau hapus semua data?')) return;
   localStorage.removeItem(STORAGE_KEY);
   renderHistory();
+  document.getElementById('historyDetailCard').style.display = 'none';
   setStatus(document.getElementById('histStatus'), '✅ All data cleared', 'ok');
 });
 
