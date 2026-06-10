@@ -194,6 +194,9 @@ Jika data tidak terlihat, tulis "NOT_VISIBLE".
         )
         return response.text
     except Exception as e:
+        err = str(e)
+        if "not found" in err.lower() or "not supported" in err.lower() or "400" in err:
+            return f"ERROR: Model '{MODEL_NAME}' tidak valid di Gemini API. Ganti model di config.json ke gemini-2.5-flash atau gemini-2.5-pro."
         return f"ERROR: {e}"
 
 
