@@ -52,9 +52,15 @@ def load_config() -> dict:
     return {}
 
 
-def init_gemini():
-    cfg = load_config()
-    api_key = cfg.get("gemini_api_key") or os.getenv("GEMINI_API_KEY", "")
+def save_config(cfg: dict):
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2, ensure_ascii=False)
+
+
+def init_gemini(api_key: str = None):
+    if api_key is None:
+        cfg = load_config()
+        api_key = cfg.get("gemini_api_key") or os.getenv("GEMINI_API_KEY", "")
     if not api_key or api_key.startswith("YOUR_"):
         return None
     return genai.Client(api_key=api_key)
@@ -62,6 +68,26 @@ def init_gemini():
 
 CLIENT = init_gemini()
 MODEL_NAME = load_config().get("model", "gemini-2.5-flash")
+
+
+def get_api_key_status():
+    cfg = load_config()
+    key = cfg.get("gemini_api_key", "")
+    if key and not key.startswith("YOUR_"):
+        return "🟢 API Key sudah aktif", key
+    return "🔴 API Key belum diisi — AI fitur gak bisa jalan", ""
+
+
+def set_api_key(key_input: str):
+    global CLIENT
+    key = key_input.strip()
+    if not key:
+        return "🔴 API Key kosong", ""
+    cfg = load_config()
+    cfg["gemini_api_key"] = key
+    save_config(cfg)
+    CLIENT = init_gemini(key)
+    return "🟢 API Key aktif — AI ready!", key
 
 def get_csv_path() -> str:
     cfg = load_config()
@@ -433,6 +459,37 @@ def build_ui():
         **Jurnal trading saham IDX dengan AI Google Gemini (gratis)**
         Upload screenshot chart, input manual, atau PDF report broker.
         """)
+
+        # ── API KEY INPUT ──
+        with gr.Row():
+            with gr.Column(scale=3):
+                api_key_input = gr.Textbox(
+                    label="🔑 Gemini API Key",
+                    placeholder="Paste API key dari Google AI Studio...",
+                    type="password",
+                    value=load_config().get("gemini_api_key", ""),
+                    show_copy_button=True,
+                )
+            with gr.Column(scale=1):
+                api_key_status = gr.Textbox(
+                    label="Status",
+                    value=get_api_key_status()[0],
+                    interactive=False,
+                )
+            with gr.Column(scale=1):
+                api_key_btn = gr.Button("💾 Save API Key", variant="primary")
+                api_key_btn.click(
+                    set_api_key,
+                    inputs=[api_key_input],
+                    outputs=[api_key_status, api_key_input],
+                )
+                # Auto-load status on startup
+                demo.load(
+                    get_api_key_status,
+                    outputs=[api_key_status, api_key_input],
+                )
+
+        gr.Markdown("---")
 
         with gr.Tabs():
             # ── TAB 1: IMAGE ──
