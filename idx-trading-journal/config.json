@@ -1,6 +1,6 @@
 {
   "gemini_api_key": "YOUR_GEMINI_API_KEY_HERE",
-  "model": "gemini-2.5-flash",
+  "model": "gemma-4-26b-a4b-it",
   "journal_file": "journal/idx_trading_journal.csv",
   "default_emotion": "netral",
   "idx_stocks": [
