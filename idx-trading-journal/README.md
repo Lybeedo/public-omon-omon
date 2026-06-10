@@ -61,6 +61,8 @@ idx-trading-journal/
 ├── config.json           ← API key & settings
 ├── run.bat               ← Windows launcher
 ├── run.sh                ← Linux/Mac launcher
+├── build.py              ← PyInstaller build script
+├── build.bat             ← One-click build EXE
 └── .env.example          ← API key template
 ```
 
@@ -92,6 +94,45 @@ Buka di Excel/Google Sheets untuk analisis lebih lanjut.
 - Python 3.10+
 - Google Gemini API Key (gratis tier)
 - Chrome/Edge/Firefox (any modern browser)
+
+---
+
+## 🔨 Build Standalone EXE (Windows)
+
+Mau jadiin EXE biar tinggal double-click? Gak perlu Python terinstall:
+
+### 1. Install Build Tools
+```bash
+uv pip install -r requirements.txt
+# atau: pip install -r requirements.txt
+```
+
+### 2. Build
+```bash
+# Cara cepat
+double-click build.bat
+
+# Atau manual
+python build.py
+```
+
+### 3. Output
+```
+dist/
+└── IDX_Trading_Journal/
+    ├── IDX_Trading_Journal.exe   ← Double-click ini
+    ├── config.json                ← Edit API key di sini
+    └── ... (dll)
+```
+
+### 4. Jalankan
+```
+double-click dist/IDX_Trading_Journal/IDX_Trading_Journal.exe
+```
+
+**Browser auto-open ke** `http://localhost:7860`
+
+**Folder `journal/` auto-create di sebelah EXE** untuk simpan CSV history.
 
 ---
 
