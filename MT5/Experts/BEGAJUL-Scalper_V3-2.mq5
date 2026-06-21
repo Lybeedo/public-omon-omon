@@ -1734,6 +1734,7 @@ void VO_UpdatePOType()
 //+------------------------------------------------------------------+
 void VO_CheckStops()
 {
+<<<<<<< HEAD
    for (int i = 0; i < a_N; i++)
    {
       if (a_type[i] != ORDER_TYPE_BUY && a_type[i] != ORDER_TYPE_SELL) continue;
@@ -1746,10 +1747,32 @@ void VO_CheckStops()
       int    digs = (int)SymbolInfoInteger(posInfo.Symbol(), SYMBOL_DIGITS);
       double sl   = a_sl[i];
       double tp   = a_tp[i];
+=======
+   // 1. Gunakan Descending Loop (mundur) supaya index gak berantakan pas ada posisi close
+   for (int i = a_N - 1; i >= 0; i--)
+   {
+      if (a_type[i] != ORDER_TYPE_BUY && a_type[i] != ORDER_TYPE_SELL) continue;
+
+      // 2. Gunakan TICKET, bukan INDEX, supaya lebih stabil di Live Trading
+      ulong ticket = a_tickets[i];
+      if (!PositionSelectByTicket(ticket)) continue; 
+
+      // 3. Ambil data langsung dari posisi yang sudah terpilih
+      string sym = PositionGetString(POSITION_SYMBOL);
+      if (sym != _Symbol) continue; // Pastikan hanya proses symbol ini
+
+      double bid  = SymbolInfoDouble(sym, SYMBOL_BID);
+      double ask  = SymbolInfoDouble(sym, SYMBOL_ASK);
+      int    digs = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      double sl   = a_sl[i];
+      double tp   = a_tp[i];
+      double vol  = PositionGetDouble(POSITION_VOLUME);
+>>>>>>> 69977ad (fix: BEGAJUL Virtual SL/TP logic (descending loop & ticket selection))
 
       MqlTradeRequest req = {};
       MqlTradeResult  res = {};
 
+<<<<<<< HEAD
       if (a_type[i] == ORDER_TYPE_BUY)
       {
          if (tp > 0 && NormalizeDouble(bid, digs) >= NormalizeDouble(tp, digs))
@@ -1778,10 +1801,42 @@ void VO_CheckStops()
             req.position  = a_tickets[i];
             bool rc2 = OrderSend(req, res);
             if (!rc2) Print("[CheckStops] Close BUY SL error: ", GetLastError());
+=======
+      // --- LOGIC BUY ---
+      if (a_type[i] == ORDER_TYPE_BUY)
+      {
+         // Check Virtual TP
+         if (tp > 0 && NormalizeDouble(bid, digs) >= NormalizeDouble(tp, digs))
+         {
+            Print("[CheckStops] Close BUY by VirtualTP @ ", DoubleToString(bid, digs), " (Target: ", DoubleToString(tp, digs), ")");
+            req.action    = TRADE_ACTION_DEAL;
+            req.symbol    = sym;
+            req.type      = ORDER_TYPE_SELL;
+            req.volume    = vol;
+            req.price     = bid;
+            req.deviation = Slippage * fpc();
+            req.position  = ticket;
+            if (!OrderSend(req, res)) Print("[CheckStops] Close BUY TP error: ", GetLastError());
+            continue;
+         }
+         // Check Virtual SL
+         if (sl > 0 && NormalizeDouble(bid, digs) <= NormalizeDouble(sl, digs))
+         {
+            Print("[CheckStops] Close BUY by VirtualSL @ ", DoubleToString(bid, digs), " (Target: ", DoubleToString(sl, digs), ")");
+            req.action    = TRADE_ACTION_DEAL;
+            req.symbol    = sym;
+            req.type      = ORDER_TYPE_SELL;
+            req.volume    = vol;
+            req.price     = bid;
+            req.deviation = Slippage * fpc();
+            req.position  = ticket;
+            if (!OrderSend(req, res)) Print("[CheckStops] Close BUY SL error: ", GetLastError());
+>>>>>>> 69977ad (fix: BEGAJUL Virtual SL/TP logic (descending loop & ticket selection))
             continue;
          }
       }
 
+<<<<<<< HEAD
       if (a_type[i] == ORDER_TYPE_SELL)
       {
          if (tp > 0 && NormalizeDouble(ask, digs) <= NormalizeDouble(tp, digs))
@@ -1810,6 +1865,37 @@ void VO_CheckStops()
             req.position  = a_tickets[i];
             bool rc4 = OrderSend(req, res);
             if (!rc4) Print("[CheckStops] Close SELL SL error: ", GetLastError());
+=======
+      // --- LOGIC SELL ---
+      else if (a_type[i] == ORDER_TYPE_SELL)
+      {
+         // Check Virtual TP
+         if (tp > 0 && NormalizeDouble(ask, digs) <= NormalizeDouble(tp, digs))
+         {
+            Print("[CheckStops] Close SELL by VirtualTP @ ", DoubleToString(ask, digs), " (Target: ", DoubleToString(tp, digs), ")");
+            req.action    = TRADE_ACTION_DEAL;
+            req.symbol    = sym;
+            req.type      = ORDER_TYPE_BUY;
+            req.volume    = vol;
+            req.price     = ask;
+            req.deviation = Slippage * fpc();
+            req.position  = ticket;
+            if (!OrderSend(req, res)) Print("[CheckStops] Close SELL TP error: ", GetLastError());
+            continue;
+         }
+         // Check Virtual SL
+         if (sl > 0 && NormalizeDouble(ask, digs) >= NormalizeDouble(sl, digs))
+         {
+            Print("[CheckStops] Close SELL by VirtualSL @ ", DoubleToString(ask, digs), " (Target: ", DoubleToString(sl, digs), ")");
+            req.action    = TRADE_ACTION_DEAL;
+            req.symbol    = sym;
+            req.type      = ORDER_TYPE_BUY;
+            req.volume    = vol;
+            req.price     = ask;
+            req.deviation = Slippage * fpc();
+            req.position  = ticket;
+            if (!OrderSend(req, res)) Print("[CheckStops] Close SELL SL error: ", GetLastError());
+>>>>>>> 69977ad (fix: BEGAJUL Virtual SL/TP logic (descending loop & ticket selection))
             continue;
          }
       }
