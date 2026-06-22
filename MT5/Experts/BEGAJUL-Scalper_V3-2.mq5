@@ -1734,74 +1734,38 @@ void VO_UpdatePOType()
 //+------------------------------------------------------------------+
 void VO_CheckStops()
 {
-<<<<<<< HEAD
-   for (int i = 0; i < a_N; i++)
-   {
-      if (a_type[i] != ORDER_TYPE_BUY && a_type[i] != ORDER_TYPE_SELL) continue;
-
-      // *** FIX: Gunakan SelectPositionSafe agar virtual ticket di-resolve dulu ***
-      if (!SelectPositionSafe(i)) continue;
-
-      double bid  = SymbolInfoDouble(posInfo.Symbol(), SYMBOL_BID);
-      double ask  = SymbolInfoDouble(posInfo.Symbol(), SYMBOL_ASK);
-      int    digs = (int)SymbolInfoInteger(posInfo.Symbol(), SYMBOL_DIGITS);
-      double sl   = a_sl[i];
-      double tp   = a_tp[i];
-=======
-   // 1. Gunakan Descending Loop (mundur) supaya index gak berantakan pas ada posisi close
+//+------------------------------------------------------------------+
+//| FIX: VO_CheckStops - Versi Bersih (Clean & Optimized)            |
+//| - Menggunakan Descending Loop (mundur) agar index tidak rusak    |
+//| - Menggunakan SelectPositionSafe agar Virtual Ticket ter-resolve |
+//+------------------------------------------------------------------+
+void VO_CheckStops()
+{
+   // 1. Pakai Descending Loop (mundur) supaya kalau ada posisi yang di-close/hapus, 
+   // index array a_N tidak berantakan dan tidak ada posisi yang terlewati.
    for (int i = a_N - 1; i >= 0; i--)
    {
       if (a_type[i] != ORDER_TYPE_BUY && a_type[i] != ORDER_TYPE_SELL) continue;
 
-      // 2. Gunakan TICKET, bukan INDEX, supaya lebih stabil di Live Trading
-      ulong ticket = a_tickets[i];
-      if (!PositionSelectByTicket(ticket)) continue; 
+      // 2. Gunakan SelectPositionSafe agar jika ticket masih bersifat "virtual" 
+      // (belum sempat dapet ticket real dari broker), dia otomatis dicari ticket realnya.
+      if (!SelectPositionSafe(i)) continue;
 
-      // 3. Ambil data langsung dari posisi yang sudah terpilih
-      string sym = PositionGetString(POSITION_SYMBOL);
-      if (sym != _Symbol) continue; // Pastikan hanya proses symbol ini
+      // 3. Ambil data langsung dari object posInfo yang sudah terpilih secara otomatis
+      string sym = posInfo.Symbol();
+      if (sym != _Symbol) continue; 
 
       double bid  = SymbolInfoDouble(sym, SYMBOL_BID);
       double ask  = SymbolInfoDouble(sym, SYMBOL_ASK);
       int    digs = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
       double sl   = a_sl[i];
       double tp   = a_tp[i];
-      double vol  = PositionGetDouble(POSITION_VOLUME);
->>>>>>> 69977ad (fix: BEGAJUL Virtual SL/TP logic (descending loop & ticket selection))
+      double vol  = posInfo.Volume();
+      ulong  ticket = posInfo.Ticket();
 
       MqlTradeRequest req = {};
       MqlTradeResult  res = {};
 
-<<<<<<< HEAD
-      if (a_type[i] == ORDER_TYPE_BUY)
-      {
-         if (tp > 0 && NormalizeDouble(bid, digs) >= NormalizeDouble(tp, digs))
-         {
-            Print("[CheckStops] Close BUY by VirtualTP ", DoubleToString(tp, digs));
-            req.action    = TRADE_ACTION_DEAL;
-            req.symbol    = posInfo.Symbol();
-            req.type      = ORDER_TYPE_SELL;
-            req.volume    = posInfo.Volume();
-            req.price     = bid;
-            req.deviation = Slippage * fpc();
-            req.position  = a_tickets[i];
-            bool rc1 = OrderSend(req, res);
-            if (!rc1) Print("[CheckStops] Close BUY TP error: ", GetLastError());
-            continue;
-         }
-         if (sl > 0 && NormalizeDouble(bid, digs) <= NormalizeDouble(sl, digs))
-         {
-            Print("[CheckStops] Close BUY by VirtualSL ", DoubleToString(sl, digs));
-            req.action    = TRADE_ACTION_DEAL;
-            req.symbol    = posInfo.Symbol();
-            req.type      = ORDER_TYPE_SELL;
-            req.volume    = posInfo.Volume();
-            req.price     = bid;
-            req.deviation = Slippage * fpc();
-            req.position  = a_tickets[i];
-            bool rc2 = OrderSend(req, res);
-            if (!rc2) Print("[CheckStops] Close BUY SL error: ", GetLastError());
-=======
       // --- LOGIC BUY ---
       if (a_type[i] == ORDER_TYPE_BUY)
       {
@@ -1831,41 +1795,9 @@ void VO_CheckStops()
             req.deviation = Slippage * fpc();
             req.position  = ticket;
             if (!OrderSend(req, res)) Print("[CheckStops] Close BUY SL error: ", GetLastError());
->>>>>>> 69977ad (fix: BEGAJUL Virtual SL/TP logic (descending loop & ticket selection))
             continue;
          }
       }
-
-<<<<<<< HEAD
-      if (a_type[i] == ORDER_TYPE_SELL)
-      {
-         if (tp > 0 && NormalizeDouble(ask, digs) <= NormalizeDouble(tp, digs))
-         {
-            Print("[CheckStops] Close SELL by VirtualTP ", DoubleToString(tp, digs));
-            req.action    = TRADE_ACTION_DEAL;
-            req.symbol    = posInfo.Symbol();
-            req.type      = ORDER_TYPE_BUY;
-            req.volume    = posInfo.Volume();
-            req.price     = ask;
-            req.deviation = Slippage * fpc();
-            req.position  = a_tickets[i];
-            bool rc3 = OrderSend(req, res);
-            if (!rc3) Print("[CheckStops] Close SELL TP error: ", GetLastError());
-            continue;
-         }
-         if (sl > 0 && NormalizeDouble(ask, digs) >= NormalizeDouble(sl, digs))
-         {
-            Print("[CheckStops] Close SELL by VirtualSL ", DoubleToString(sl, digs));
-            req.action    = TRADE_ACTION_DEAL;
-            req.symbol    = posInfo.Symbol();
-            req.type      = ORDER_TYPE_BUY;
-            req.volume    = posInfo.Volume();
-            req.price     = ask;
-            req.deviation = Slippage * fpc();
-            req.position  = a_tickets[i];
-            bool rc4 = OrderSend(req, res);
-            if (!rc4) Print("[CheckStops] Close SELL SL error: ", GetLastError());
-=======
       // --- LOGIC SELL ---
       else if (a_type[i] == ORDER_TYPE_SELL)
       {
@@ -1895,245 +1827,8 @@ void VO_CheckStops()
             req.deviation = Slippage * fpc();
             req.position  = ticket;
             if (!OrderSend(req, res)) Print("[CheckStops] Close SELL SL error: ", GetLastError());
->>>>>>> 69977ad (fix: BEGAJUL Virtual SL/TP logic (descending loop & ticket selection))
             continue;
          }
       }
    }
 }
-
-//+------------------------------------------------------------------+
-//| FIX: VO_ClearStops - gunakan SelectPositionSafe()               |
-//+------------------------------------------------------------------+
-void VO_ClearStops()
-{
-   for (int i = a_N - 1; i >= 0; i--)
-   {
-      if (a_type[i] != ORDER_TYPE_BUY && a_type[i] != ORDER_TYPE_SELL) continue;
-
-      // *** FIX: Jika ticket masih virtual, jangan hapus — posisi mungkin belum muncul ***
-      if (a_is_virtual_ticket[i]) continue;
-
-      ulong ticket   = a_tickets[i];
-      bool  bRemove  = false;
-
-      if (!posInfo.SelectByTicket(ticket))
-      {
-         // Verifikasi via scan PositionsTotal sebelum hapus
-         bool still_exists = false;
-         for (int pi = 0; pi < PositionsTotal(); pi++)
-         {
-            string ps = PositionGetSymbol(pi);
-            if (ps != a_symbol[i]) continue;
-            if ((long)PositionGetInteger(POSITION_MAGIC) != a_magic[i]) continue;
-            still_exists = true;
-            break;
-         }
-         if (!still_exists) bRemove = true;
-      }
-
-      if (bRemove) VOrderRemove(i);
-   }
-}
-
-void VOrderRemove(int ind)
-{
-   for (int j = ind; j < a_N - 1; j++)
-   {
-      a_tickets[j]              = a_tickets[j+1];
-      a_is_virtual_ticket[j]    = a_is_virtual_ticket[j+1];
-      a_type[j]                 = a_type[j+1];
-      a_symbol[j]               = a_symbol[j+1];
-      a_volume[j]               = a_volume[j+1];
-      a_open_price[j]           = a_open_price[j+1];
-      a_sl[j]                   = a_sl[j+1];
-      a_tp[j]                   = a_tp[j+1];
-      a_magic[j]                = a_magic[j+1];
-      a_comment[j]              = a_comment[j+1];
-      a_color[j]                = a_color[j+1];
-   }
-   a_N--;
-}
-
-void VO_DrawStops()
-{
-   string obj_name;
-
-   obj_name = vo_prefix + "Legend";
-   if (ObjectFind(0, obj_name) == -1)
-      ObjectCreate(0, obj_name, OBJ_LABEL, 0, 0, 0);
-   ObjectSetString(0, obj_name, OBJPROP_TEXT, "Virtual Orders Storage");
-   ObjectSetString(0, obj_name, OBJPROP_FONT, VOrdText_font);
-   ObjectSetInteger(0, obj_name, OBJPROP_FONTSIZE, VOrdText_font_size);
-   ObjectSetInteger(0, obj_name, OBJPROP_COLOR, VOrdText_font_color);
-   ObjectSetInteger(0, obj_name, OBJPROP_CORNER, VOrdText_corner);
-   ObjectSetInteger(0, obj_name, OBJPROP_XDISTANCE, VOrdText_x);
-   ObjectSetInteger(0, obj_name, OBJPROP_YDISTANCE, VOrdText_y);
-
-   string ColPref[7] = {"ticket", "type", "volume", "symbol", "open_price", "sl", "tp"};
-
-   for (int i = 0; i < a_N; i++)
-   {
-      int    digs  = (int)SymbolInfoInteger(a_symbol[i], SYMBOL_DIGITS);
-      string vals[7];
-      vals[0] = IntegerToString(a_tickets[i]);
-      vals[1] = OrdType2Str(a_type[i]);
-      vals[2] = DoubleToString(a_volume[i], 2);
-      vals[3] = a_symbol[i];
-      vals[4] = DoubleToString(a_open_price[i], digs);
-      vals[5] = DoubleToString(a_sl[i], digs);
-      vals[6] = DoubleToString(a_tp[i], digs);
-
-      int dx = VOrdText_x;
-      for (int j = 6; j >= 0; j--)
-      {
-         obj_name = vo_prefix + "ord" + IntegerToString(i) + "_" + ColPref[j];
-         if (ObjectFind(0, obj_name) == -1)
-            ObjectCreate(0, obj_name, OBJ_LABEL, 0, 0, 0);
-         ObjectSetString(0, obj_name, OBJPROP_TEXT, vals[j]);
-         ObjectSetString(0, obj_name, OBJPROP_FONT, VOrdText_font);
-         ObjectSetInteger(0, obj_name, OBJPROP_FONTSIZE, VOrdText_font_size);
-         ObjectSetInteger(0, obj_name, OBJPROP_COLOR, VOrdText_font_color);
-         ObjectSetInteger(0, obj_name, OBJPROP_CORNER, VOrdText_corner);
-         ObjectSetInteger(0, obj_name, OBJPROP_XDISTANCE, dx);
-         ObjectSetInteger(0, obj_name, OBJPROP_YDISTANCE, VOrdText_y + (i+1) * VOrdText_dy);
-         dx += VOrdText_dx;
-      }
-   }
-
-   for (int i = a_N; i < 1000; i++)
-   {
-      obj_name = vo_prefix + "ord" + IntegerToString(i);
-      if (ObjectFind(0, obj_name) != -1) ObjectDelete(0, obj_name);
-   }
-}
-
-void DrawVirtualLines()
-{
-   for (int i = ObjectsTotal(0) - 1; i >= 0; i--)
-   {
-      string nm = ObjectName(0, i);
-      if (StringFind(nm, vo_prefix + "line_") == 0)
-         ObjectDelete(0, nm);
-   }
-
-   int digs = (int)SymbolInfoInteger(Symbol(), SYMBOL_DIGITS);
-
-   for (int i = 0; i < a_N; i++)
-   {
-      if (a_type[i] != ORDER_TYPE_BUY && a_type[i] != ORDER_TYPE_SELL) continue;
-
-      string base = vo_prefix + "line_" + IntegerToString(i);
-
-      string nm_entry = base + "_entry";
-      if (ObjectFind(0, nm_entry) == -1)
-         ObjectCreate(0, nm_entry, OBJ_HLINE, 0, 0, 0);
-      ObjectSetDouble(0, nm_entry, OBJPROP_PRICE, a_open_price[i]);
-      ObjectSetInteger(0, nm_entry, OBJPROP_COLOR, clrDodgerBlue);
-      ObjectSetInteger(0, nm_entry, OBJPROP_STYLE, STYLE_SOLID);
-      ObjectSetInteger(0, nm_entry, OBJPROP_WIDTH, 1);
-      ObjectSetString(0, nm_entry, OBJPROP_TEXT,
-         (a_type[i] == ORDER_TYPE_BUY ? "BUY" : "SELL") +
-         " Entry: " + DoubleToString(a_open_price[i], digs));
-
-      if (a_sl[i] > 0)
-      {
-         string nm_sl = base + "_sl";
-         if (ObjectFind(0, nm_sl) == -1)
-            ObjectCreate(0, nm_sl, OBJ_HLINE, 0, 0, 0);
-         ObjectSetDouble(0, nm_sl, OBJPROP_PRICE, a_sl[i]);
-         ObjectSetInteger(0, nm_sl, OBJPROP_COLOR, clrRed);
-         ObjectSetInteger(0, nm_sl, OBJPROP_STYLE, STYLE_DASH);
-         ObjectSetInteger(0, nm_sl, OBJPROP_WIDTH, 2);
-         ObjectSetString(0, nm_sl, OBJPROP_TEXT,
-            "Virtual SL: " + DoubleToString(a_sl[i], digs));
-      }
-
-      if (a_tp[i] > 0)
-      {
-         string nm_tp = base + "_tp";
-         if (ObjectFind(0, nm_tp) == -1)
-            ObjectCreate(0, nm_tp, OBJ_HLINE, 0, 0, 0);
-         ObjectSetDouble(0, nm_tp, OBJPROP_PRICE, a_tp[i]);
-         ObjectSetInteger(0, nm_tp, OBJPROP_COLOR, clrLime);
-         ObjectSetInteger(0, nm_tp, OBJPROP_STYLE, STYLE_DASH);
-         ObjectSetInteger(0, nm_tp, OBJPROP_WIDTH, 2);
-         ObjectSetString(0, nm_tp, OBJPROP_TEXT,
-            "Virtual TP: " + DoubleToString(a_tp[i], digs));
-      }
-
-      if (vTrailingStart > 0)
-      {
-         double trail_level = 0;
-         string trail_label = "";
-         if (a_type[i] == ORDER_TYPE_BUY)
-         {
-            trail_level = a_open_price[i] + vTrailingStart;
-            trail_label = "Trail Start BUY: " + DoubleToString(trail_level, digs);
-         }
-         else
-         {
-            trail_level = a_open_price[i] - vTrailingStart;
-            trail_label = "Trail Start SELL: " + DoubleToString(trail_level, digs);
-         }
-
-         string nm_tr = base + "_trail";
-         if (ObjectFind(0, nm_tr) == -1)
-            ObjectCreate(0, nm_tr, OBJ_HLINE, 0, 0, 0);
-         ObjectSetDouble(0, nm_tr, OBJPROP_PRICE, trail_level);
-         ObjectSetInteger(0, nm_tr, OBJPROP_COLOR, clrOrange);
-         ObjectSetInteger(0, nm_tr, OBJPROP_STYLE, STYLE_DOT);
-         ObjectSetInteger(0, nm_tr, OBJPROP_WIDTH, 1);
-         ObjectSetString(0, nm_tr, OBJPROP_TEXT, trail_label);
-      }
-
-      string nm_lbl = base + "_label";
-      if (ObjectFind(0, nm_lbl) == -1)
-         ObjectCreate(0, nm_lbl, OBJ_LABEL, 0, 0, 0);
-      string lbl_txt = "";
-      if (a_sl[i] > 0) lbl_txt += "SL:" + DoubleToString(a_sl[i], digs) + "  ";
-      if (a_tp[i] > 0) lbl_txt += "TP:" + DoubleToString(a_tp[i], digs);
-      ObjectSetString(0, nm_lbl, OBJPROP_TEXT, lbl_txt);
-      ObjectSetInteger(0, nm_lbl, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
-      ObjectSetInteger(0, nm_lbl, OBJPROP_XDISTANCE, 10);
-      ObjectSetInteger(0, nm_lbl, OBJPROP_YDISTANCE, 60 + i * 30);
-      ObjectSetInteger(0, nm_lbl, OBJPROP_COLOR, clrYellow);
-      ObjectSetString(0, nm_lbl, OBJPROP_FONT, "Arial Bold");
-      ObjectSetInteger(0, nm_lbl, OBJPROP_FONTSIZE, 9);
-   }
-
-   ChartRedraw(0);
-}
-
-string OrdType2Str(int type)
-{
-   switch (type)
-   {
-      case ORDER_TYPE_BUY:        return "Buy";
-      case ORDER_TYPE_SELL:       return "Sell";
-      case ORDER_TYPE_BUY_LIMIT:  return "BuyLimit";
-      case ORDER_TYPE_SELL_LIMIT: return "SellLimit";
-      case ORDER_TYPE_BUY_STOP:   return "BuyStop";
-      case ORDER_TYPE_SELL_STOP:  return "SellStop";
-   }
-   return IntegerToString(type);
-}
-
-int Str2OrdType(string sType)
-{
-   if (sType == "Buy")       return ORDER_TYPE_BUY;
-   if (sType == "Sell")      return ORDER_TYPE_SELL;
-   if (sType == "BuyLimit")  return ORDER_TYPE_BUY_LIMIT;
-   if (sType == "SellLimit") return ORDER_TYPE_SELL_LIMIT;
-   if (sType == "BuyStop")   return ORDER_TYPE_BUY_STOP;
-   if (sType == "SellStop")  return ORDER_TYPE_SELL_STOP;
-   return -1;
-}
-
-int fpc()
-{
-   int d = (int)SymbolInfoInteger(Symbol(), SYMBOL_DIGITS);
-   if (d == 3 || d == 5) return 10;
-   return 1;
-}
-//+------------------------------------------------------------------+
