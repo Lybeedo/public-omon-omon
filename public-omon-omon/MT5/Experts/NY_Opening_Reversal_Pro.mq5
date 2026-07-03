@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Agent Hermes"
 #property link      "https://hermes.ai"
-#property version   "1.10"
+#property version   "1.20"
 #property strict
 
 //--- ENUMS
@@ -14,6 +14,11 @@ enum ENUM_CANDLE_TYPE {
    CANDLE_BEARISH,
    CANDLE_DOJI,
    CANDLE_UNKNOWN
+};
+
+enum ENUM_RISK_MODE { 
+   RISK_FIXED_LOT, 
+   RISK_PERCENT_EQUITY 
 };
 
 //--- INPUT PARAMETERS
@@ -30,7 +35,12 @@ input int      InpSLPoints        = 500;        // Stop Loss (Points)
 input int      InpTPPoints        = 1000;       // Take Profit (Points)
 input double   InpDojiThreshold   = 0.1;        // Doji Threshold (0.1 = 10% body/range)
 
-input group "--- RISK MANAGEMENT (BE & TRAILING) ---"
+input group "--- MONEY MANAGEMENT ---"
+input ENUM_RISK_MODE InpRiskMode  = RISK_FIXED_LOT; // Risk Mode
+input double   InpLotSize         = 0.1;        // Fixed Lot Size
+input double   InpRiskPercent     = 1.0;        // % Risk of Equity
+
+input group "--- TRADE MANAGEMENT (BE & TRAILING) ---"
 input bool     InpUseRiskMgmt     = true;       // Enable Break-Even & Trailing?
 input int      InpBEActivation    = 200;        // Break-Even Activation (Points)
 input int      InpBELock          = 100;        // Break-Even Lock (Points)
@@ -38,7 +48,6 @@ input int      InpTrailingStep    = 50;         // Trailing Step (Points)
 
 input group "--- SYSTEM ---"
 input long     InpMagic           = 123456;     // Magic Number
-input double   InpLotSize         = 0.1;        // Fixed Lot Size
 
 //--- GLOBAL VARIABLES
 datetime last_trade_day = 0;
@@ -78,6 +87,37 @@ void OnTick() {
 }
 
 //+------------------------------------------------------------------+
+//| Calculate Lot Size based on Risk Mode                            |
+//+------------------------------------------------------------------+
+double CalculateLot(double sl_points) {
+   if(InpRiskMode == RISK_FIXED_LOT) return InpLotSize;
+   
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double risk_money = equity * (InpRiskPercent / 100.0);
+   
+   double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+   double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+   
+   if(sl_points <= 0 || tick_value <= 0 || tick_size <= 0) return InpLotSize;
+   
+   // Value of 1 point per 1 lot = (tick_value / tick_size) * _Point
+   double points_value = (tick_value / tick_size) * _Point;
+   double lot = risk_money / (sl_points * points_value);
+   
+   // Normalize to broker step
+   double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+   lot = MathFloor(lot / step) * step;
+   
+   double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   
+   if(lot < min_lot) lot = min_lot;
+   if(lot > max_lot) lot = max_lot;
+   
+   return NormalizeDouble(lot, 2);
+}
+
+//+------------------------------------------------------------------+
 //| Analyze candle and place pending orders                          |
 //+------------------------------------------------------------------+
 void CheckAndPlaceOrders(MqlDateTime &dt) {
@@ -93,13 +133,9 @@ void CheckAndPlaceOrders(MqlDateTime &dt) {
    ArraySetAsSeries(rates, true);
    int copied = CopyRates(_Symbol, _Period, signal_time, 1, rates);
 
-   if(copied <= 0) {
-      Print("Error: Could not copy signal candle data.");
-      return;
-   }
+   if(copied <= 0) return;
 
    ENUM_CANDLE_TYPE type = GetCandleType(rates[0]);
-   
    if(type == CANDLE_DOJI) {
       Print("Signal candle is a Doji. Skipping trade for today.");
       last_trade_day = today_start; 
@@ -112,10 +148,11 @@ void CheckAndPlaceOrders(MqlDateTime &dt) {
    ZeroMemory(result);
 
    double open_price = rates[0].open;
+   double calculated_lot = CalculateLot((double)InpSLPoints);
 
    request.action       = TRADE_ACTION_PENDING;
    request.symbol       = _Symbol;
-   request.volume       = InpLotSize;
+   request.volume       = calculated_lot;
    request.price        = NormalizeDouble(open_price, _Digits);
    request.magic        = InpMagic;
    request.type_time    = ORDER_TIME_DAY;
@@ -133,7 +170,7 @@ void CheckAndPlaceOrders(MqlDateTime &dt) {
    else return;
 
    if(OrderSend(request, result)) {
-      Print("Order placed successfully. Ticket: ", result.order);
+      Print("Order placed successfully. Ticket: ", result.order, " Lot: ", calculated_lot);
       last_trade_day = today_start;
    } else {
       Print("Order placement failed. Error: ", GetLastError());
