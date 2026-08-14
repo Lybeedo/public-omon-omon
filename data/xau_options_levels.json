@@ -1,0 +1,23 @@
+{
+  "symbol": "XAU",
+  "price": 4144.5,
+  "timestamp": "2026-08-14T02:34:43.012308",
+  "levels": {
+    "call_wall": 4144.5,
+    "put_wall": 3994.5,
+    "gamma_flip": 4044.6,
+    "max_pain": 3994.5,
+    "vol_trigger": 4225.7
+  },
+  "exposure": {
+    "net_gex": 9.3,
+    "net_dex": -101.2,
+    "gex_ratio": 1.13
+  },
+  "condition": {
+    "positive_gamma": true,
+    "above_gamma_flip": true,
+    "above_call_wall": false,
+    "confluence": false
+  }
+}

@@ -1,0 +1,12 @@
+level,price,pct_from_price,type
+SYMBOL,4144.5,0,meta
+NET_GEX,9.3,0,meta
+NET_DEX,-101.2,0,meta
+GEX_RATIO,1.13,0,meta
+CONDITION,1,0,meta
+CONFLUENCE,0,0,meta
+C-WALL,4144.5,0.0,resistance
+P-WALL,3994.5,-3.6,support
+Gamma Flip,4044.6,-2.4,flip
+Max Pain,3994.5,-3.6,magnet
+Vol Trigger,4225.7,2.0,signal
