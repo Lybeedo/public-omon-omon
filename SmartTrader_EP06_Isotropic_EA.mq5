@@ -56,6 +56,7 @@ int    g_anchor = 0; // 0=Live Bar, 1=Close Bar
 int    g_trendDir = 0; // 1=Up, -1=Down, 0=Flat
 double g_sigma = 0;
 double g_chUpper = 0, g_chLower = 0;
+CTrade g_trade;
 
 //+------------------------------------------------------------------+
 //| Yang-Zhang Volatility Estimator                                  |
@@ -195,14 +196,14 @@ void FitChannel(int groups, int period, double &upper, double &lower)
    }
 
    // Linear interpolation for channel boundaries
-   double time1 = iTime(_Symbol, PERIOD_CURRENT, g_anchor + idx1);
-   double time2 = iTime(_Symbol, PERIOD_CURRENT, g_anchor + idx2);
+   datetime time1 = iTime(_Symbol, PERIOD_CURRENT, g_anchor + idx1);
+   datetime time2 = iTime(_Symbol, PERIOD_CURRENT, g_anchor + idx2);
    double price1 = (high1 > high2) ? high1 : low1;
    double price2 = (high1 > high2) ? high2 : low2;
 
-   double slope = (price2 - price1) / (time2 - time1);
-   upper = price1 + slope * (iTime(_Symbol, PERIOD_CURRENT, 0) - time1);
-   lower = (low1 < low2) ? low1 + slope * (iTime(_Symbol, PERIOD_CURRENT, 0) - time1) : high1 + slope * (iTime(_Symbol, PERIOD_CURRENT, 0) - time1);
+   double slope = (price2 - price1) / (double)(time2 - time1);
+   upper = price1 + slope * ((double)(iTime(_Symbol, PERIOD_CURRENT, 0) - time1));
+   lower = (low1 < low2) ? low1 + slope * ((double)(iTime(_Symbol, PERIOD_CURRENT, 0) - time1)) : high1 + slope * ((double)(iTime(_Symbol, PERIOD_CURRENT, 0) - time1));
 }
 
 //+------------------------------------------------------------------+
@@ -262,7 +263,7 @@ int CountPositions()
    int cnt = 0;
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
-      if(PositionGetSymbol(i) == _Symbol && PositionGetInteger(POSITION_TYPE) != POSITION_TYPE_UNKNOWN)
+      if(PositionGetSymbol(i) == _Symbol && PositionGetInteger(POSITION_TYPE) >= POSITION_TYPE_BUY)
          cnt++;
    }
    return cnt;
