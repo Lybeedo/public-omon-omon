@@ -87,7 +87,6 @@ void OnTick()
    int copied = CopyRates(_Symbol, PERIOD_CURRENT, 0, 200, rates);
    if(copied <= 0) return;
 
-   // Copy to arrays for function calls
    datetime time[];
    double open[];
    double high[];
@@ -102,12 +101,22 @@ void OnTick()
    ArraySetAsSeries(close, true);
    ArraySetAsSeries(volume, true);
 
-   ArrayCopy(time, rates[].time);
-   ArrayCopy(open, rates[].open);
-   ArrayCopy(high, rates[].high);
-   ArrayCopy(low, rates[].low);
-   ArrayCopy(close, rates[].close);
-   ArrayCopy(volume, rates[].tick_volume);
+   ArrayResize(time, copied);
+   ArrayResize(open, copied);
+   ArrayResize(high, copied);
+   ArrayResize(low, copied);
+   ArrayResize(close, copied);
+   ArrayResize(volume, copied);
+
+   for(int i = 0; i < copied; i++)
+   {
+      time[i]   = rates[i].time;
+      open[i]   = rates[i].open;
+      high[i]   = rates[i].high;
+      low[i]    = rates[i].low;
+      close[i]  = rates[i].close;
+      volume[i] = rates[i].tick_volume;
+   }
 
    if(CopyBuffer(g_atr_handle, 0, 0, 50, g_atr) <= 0)
       return;
@@ -126,7 +135,7 @@ void OnTick()
 
    double breakout_prob = 0;
    if(ShowBreakoutProb)
-      breakout_prob = CalculateBreakoutProbability(high, low, close, volume, 200);
+      breakout_prob = CalculateBreakoutProbability(high, low, close, volume, copied);
 
    if(ShowTPSL)
       DrawTPSL(current_price, atr_value);
