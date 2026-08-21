@@ -1,13 +1,12 @@
 //+------------------------------------------------------------------+
 //|                                           PriceActionDashboard.mq5 |
 //|                              Dashboard FVG, CHoCH, BOS, S&D, AOI |
-//|                                    Breakout Probability Indicator |
+//|                                    Breakout Probability Expert    |
 //+------------------------------------------------------------------+
 #property copyright   "Trader Nakal"
 #property version     "1.00"
 #property description "Price Action Dashboard: FVG, CHoCH, BOS, Supply/Demand, AOI/POI, Breakout Prob"
-#property indicator_chart_window
-#property indicator_plots 0
+#property expert
 
 #include <Trade\Trade.mqh>
 
@@ -61,7 +60,9 @@ int OnInit()
    ArraySetAsSeries(g_atr, true);
    ArraySetAsSeries(g_vol, true);
 
-   Print("Price Action Dashboard initialized");
+   EventSetTimer(1);
+
+   Print("Price Action Dashboard EA initialized");
    return(INIT_SUCCEEDED);
 }
 
@@ -80,21 +81,36 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 //| Custom indicator iteration function                               |
 //+------------------------------------------------------------------+
-int OnCalculate(const int rates_total,
-                const int prev_calculated,
-                const datetime &time[],
-                const double &open[],
-                const double &high[],
-                const double &low[],
-                const double &close[],
-                const long &tick_volume[],
-                const long &volume[],
-                const double &spread[])
+void OnTick()
 {
-   if(CopyBuffer(g_atr_handle, 0, 0, rates_total, g_atr) <= 0)
-      return(rates_total);
+   MqlRates rates[];
+   int copied = CopyRates(_Symbol, PERIOD_CURRENT, 0, 200, rates);
+   if(copied <= 0) return;
 
-   ArrayCopy(g_vol, tick_volume);
+   // Copy to arrays for function calls
+   datetime time[];
+   double open[];
+   double high[];
+   double low[];
+   double close[];
+   long volume[];
+
+   ArraySetAsSeries(time, true);
+   ArraySetAsSeries(open, true);
+   ArraySetAsSeries(high, true);
+   ArraySetAsSeries(low, true);
+   ArraySetAsSeries(close, true);
+   ArraySetAsSeries(volume, true);
+
+   ArrayCopy(time, rates[].time);
+   ArrayCopy(open, rates[].open);
+   ArrayCopy(high, rates[].high);
+   ArrayCopy(low, rates[].low);
+   ArrayCopy(close, rates[].close);
+   ArrayCopy(volume, rates[].tick_volume);
+
+   if(CopyBuffer(g_atr_handle, 0, 0, 50, g_atr) <= 0)
+      return;
 
    ObjectsDeleteAll(0, OBJ_PREFIX);
 
@@ -110,14 +126,12 @@ int OnCalculate(const int rates_total,
 
    double breakout_prob = 0;
    if(ShowBreakoutProb)
-      breakout_prob = CalculateBreakoutProbability(high, low, close, tick_volume, rates_total);
+      breakout_prob = CalculateBreakoutProbability(high, low, close, volume, 200);
 
    if(ShowTPSL)
       DrawTPSL(current_price, atr_value);
 
    DrawDashboard(current_price, atr_value, breakout_prob, time);
-
-   return(rates_total);
 }
 
 //+------------------------------------------------------------------+
