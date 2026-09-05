@@ -2,9 +2,10 @@
 //|                                                   Art_DV.mq5 |
 //|                                Copyright 2024, Trader Nakal™ Team |
 //|                          Bollinger Band Reversal / "Divergence" V |
+//|                      Optimized using CTrade::PositionOpen (Fix)  |
 //+------------------------------------------------------------------+
 #property copyright "Trader Nakal™ — Omon Agent"
-#property version   "1.01"
+#property version   "1.02"
 #include <Trade\Trade.mqh>
 
 input group "=== Bollinger Bands Settings ==="
@@ -47,8 +48,10 @@ int OnInit()
    ArraySetAsSeries(g_buff_lower, true);
    ArraySetAsSeries(g_buff_mid, true);
 
-   // Setup Trade
+   // Setup Trade - Menggunakan Magic Number tetap
    trade.SetExpertMagicNumber(998877);
+   trade.SetDeviationInPoints(50);     // Toleransi slipage 50 points (aman utk Cent)
+   trade.SetTypeFilling(ORDER_FILLING_FOK); // Fallback ke IOC jika FOK ditolak broker
    return(INIT_SUCCEEDED);
   }
 
@@ -71,16 +74,11 @@ void OnTick()
    if(PositionsTotal() > 0) return; // Hanya 1 posisi sekaligus
 
    // --- Ambil Data Indikator yang sudah di-cache di Memory ---
-   // Kita hanya copy data buffer, tidak memanggil kalkulasi ulang ke CPU berat
    if(CopyBuffer(g_bands_handle, 2, 0, 3, g_buff_upper) < 3) return; // Index 2 = Upper Band
    if(CopyBuffer(g_bands_handle, 0, 0, 3, g_buff_lower) < 3) return; // Index 0 = Lower Band
    if(CopyBuffer(g_bands_handle, 1, 0, 3, g_buff_mid)   < 3) return; // Index 1 = Middle Band
 
    // --- Logika BUY ---
-   // Syarat: 
-   // 1. Candle sebelumnya (Index 1) Low menyentuh/menembus Lower Band saat Low.
-   // 2. Close candle tersebut kembali di atas Lower Band (Pantulan/Pinbar).
-   // 3. Candle sebelum itu (Index 2) valid (Close > Lower Band - Mencegah entry saat break strong trend).
    double low_1   = iLow(_Symbol, PERIOD_CURRENT, 1);
    double close_1 = iClose(_Symbol, PERIOD_CURRENT, 1);
    double close_2 = iClose(_Symbol, PERIOD_CURRENT, 2);
@@ -95,10 +93,6 @@ void OnTick()
      }
 
    // --- Logika SELL ---
-   // Syarat:
-   // 1. Candle sebelumnya (Index 1) High menyentuh/menembus Upper Band saat High.
-   // 2. Close candle tersebut kembali di bawah Upper Band (Pantulan).
-   // 3. Candle sebelum itu (Index 2) valid (Close < Upper Band).
    double high_1      = iHigh(_Symbol, PERIOD_CURRENT, 1);
    double close_sell_1= iClose(_Symbol, PERIOD_CURRENT, 1);
    double close_sell_2= iClose(_Symbol, PERIOD_CURRENT, 2);
@@ -113,7 +107,7 @@ void OnTick()
   }
 
 //+------------------------------------------------------------------+
-//| Fungsi Eksekusi Order                                            |
+//| Fungsi Eksekusi Order (Fix API - PositionOpen)                   |
 //+------------------------------------------------------------------+
 void ExecuteOrder(ENUM_ORDER_TYPE type)
 {
@@ -122,11 +116,10 @@ void ExecuteOrder(ENUM_ORDER_TYPE type)
    double sl  = 0, tp = 0;
 
    // Hitung Jarak TP Berbasis Lebar Pita (BB Width)
-   // Ini memastikan target profit selalu proporsional dengan volatilitas pasar
    double bb_width = g_buff_upper[0] - g_buff_lower[0];
-   tp = NormalizeDouble(bb_width * InpBbWidthRatio, _Digits);
+   double profit_distance = NormalizeDouble(bb_width * InpBbWidthRatio, _Digits);
 
-   // Hitung SL dinamis berdasarkan struktur jika diaktifkan
+   // --- Hitung SL Dinamis berdasarkan Struktur ---
    if(InpUseStructuralSL)
      {
       if(type == ORDER_TYPE_BUY)
@@ -135,11 +128,11 @@ void ExecuteOrder(ENUM_ORDER_TYPE type)
          int idx_low = iLowest(_Symbol, PERIOD_CURRENT, MODE_LOW, 10, 1);
          sl = NormalizeDouble(iLow(_Symbol, PERIOD_CURRENT, idx_low) - (iHigh(_Symbol, PERIOD_CURRENT, idx_low) * 0.0005), _Digits);
         
-         // Validasi: Jangan gunakan struktur jika jaraknya terlalu tipis (risk/reward buruk)
+         // Validasi keamanan jarak SL
          double dist_sl = (sl - bid) / Point();
          if(dist_sl < 20) {
-            Print("⚠️ SL Structural terlalu tipis. Pakai default SL.");
-            sl = bid - (Point() * 50); // Default fallback 50 points
+            Print("⚠️ SL Structural terlalu tipis (<20pt). Pakai fixed fallback.");
+            sl = bid - (Point() * 50); 
          }
         }
       else
@@ -148,29 +141,38 @@ void ExecuteOrder(ENUM_ORDER_TYPE type)
          int idx_high = iHighest(_Symbol, PERIOD_CURRENT, MODE_HIGH, 10, 1);
          sl = NormalizeDouble(iHigh(_Symbol, PERIOD_CURRENT, idx_high) + (iHigh(_Symbol, PERIOD_CURRENT, idx_high) * 0.0005), _Digits);
          
-         // Validasi: Jangan gunakan struktur jika jaraknya terlalu tipis
          double dist_sl = (ask - sl) / Point();
          if(dist_sl < 20) {
-            Print("⚠️ SL Structural terlalu tipis. Pakai default SL.");
+            Print("⚠️ SL Structural terlalu tipis (<20pt). Pakai fixed fallback.");
             sl = ask + (Point() * 50);
          }
         }
      }
    else {
-      // Jika SL struktural dimatikan, beri jarak aman default berdasarkan ATR kasar atau Fixed Points
+      // Default SL jika fitur struktural dinonaktifkan
       sl = (type == ORDER_TYPE_BUY) ? bid - (Point() * 50) : ask + (Point() * 50);
    }
 
-   // Tentukan Level TP Akhir
+   // --- Kalkulasi Koordinat TP Final ---
    if(type == ORDER_TYPE_BUY)
      {
-      tp = NormalizeDouble(bid + tp, _Digits);
-      trade.Buy(InpLots, _Symbol, ask, sl, tp, "Art_BBPA Reversal Buy");
+      tp = NormalizeDouble(bid + profit_distance, _Digits);
+      
+      // EKSEKUSI MEMAKAI FIX API (PositionOpen)
+      // Parameter: Symbol, Type, Volume, Price, SL, TP, Comment, Magic
+      trade.PositionOpen(_Symbol, ORDER_TYPE_BUY, InpLots, ask, sl, tp, "Art_BBPA Buy", 998877);
      }
    else
      {
-      tp = NormalizeDouble(ask - tp, _Digits);
-      trade.Sell(InpLots, _Symbol, bid, sl, tp, "Art_BBPA Reversal Sell");
+      tp = NormalizeDouble(ask - profit_distance, _Digits);
+      
+      // EKSEKUSI MEMAKAI FIX API (PositionOpen)
+      trade.PositionOpen(_Symbol, ORDER_TYPE_SELL, InpLots, bid, sl, tp, "Art_BBPA Sell", 998877);
      }
+     
+   // Cek hasil eksekusi
+   if(!trade.ResultOrder()) {
+      Print("❌ Gagal Entry! Retcode: ", trade.ResultRetcode(), " Descript: ", trade.ResultRetcodeDescription());
+   }
 }
 //+------------------------------------------------------------------+
