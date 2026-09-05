@@ -1,101 +1,149 @@
 //+------------------------------------------------------------------+
-//|                                              Genetic_Base.mq5 |
-//|                                Copyright 2024, Trader Nakal™ Team |
-//|                     REUSABLE STRATEGY TEMPLATE (GENETIC)          |
+//|                                          Genetic_Base_Omon_Template.mq5 |
+//|                                Copyright 2024, Trader Nakal™ Team   |
+//|                            TEMPLATE V1 — Silakan Duplikat & Edit    |
 //+------------------------------------------------------------------+
 #property copyright "Trader Nakal™ — Omon Agent"
-#property version   "1.00"
+#property version   "1.0"
+#include <Trade\Trade.mqh>
 
-// 1. Hubungkan dengan Otak Utama (Foundation)
-#include "Omon_Foundation.mqh" 
+input group "=== Indikator Utama ==="
+input int    InpBBPeriod     = 20;         // Periode Bollinger Band
+input double InpBBDev        = 2.0;        // Deviasi Standard
 
-//=====================================================================
-// INPUT SETTINGS (Bisa diedit sesuai kebutuhan)
-//=====================================================================
-input group "=== Umum ==="
-input int    InpMagicNumber = 123456;      // ID Unik EA
-input double InpLots        = 0.01;       // Volume Order
+input group "=== Manajemen Modal & Risk ==="
+input double InpLot          = 0.01;       // Volume Default (Cent)
+int      InpMagicNumber      = 998877;     // ID Unik EA
 
-input group "=== Indikator Contoh ==="
-input int    InpBB_Period   = 20;         // Periode BB
-input double InpBB_Dev      = 2.0;        // Deviasi BB
+//+=================================================================+
+//| VARIABEL GLOBAL ENGINE                                          |
+//+=================================================================+
+CTrade       g_trade;                    // Objek eksekusi presisi
+int          g_h_bands;                  // Handle Indikator
+double       g_buf_upper[], g_buf_lower[], g_buf_mid[]; // Buffer Pita
 
-//=====================================================================
-// VARIABEL GLOBAL (Mesin & Buffer)
-//=====================================================================
-CMarketKernel *Kernel;    // Objek Mesin
-int           h_indicator; // Handle Indikator
-
-// Buffer penampung data indikator agar hemat proses
-double g_buff_upper[], g_buff_lower[];
-
-//+------------------------------------------------------------------+
-//| Initialization Function                                          |
-//+------------------------------------------------------------------+
+//+=================================================================+
+//| INITIALIZATION (JALAN SEKALI SAAT MULAI)                        |
+//+=================================================================+
 int OnInit()
-  {
-   // 1. Mulai Mesin/Foundation
-   Kernel = new CMarketKernel();
-   if(Kernel == NULL) { Print("Gagal buat Mesin!"); return(INIT_FAILED); }
+{
+   // Setup Object Trade Presisi
+   g_trade.SetExpertMagicNumber(InpMagicNumber);
+   g_trade.SetTypeFilling(ORDER_FILLING_FOK); // Full Or Kill
+   g_trade.SetDeviationInPoints(30);          // Toleransi slipage
+   g_trade.SetAsyncMode(false);               // Pastikan blocking untuk debugging
    
-   if(!Kernel.Init("Genetic Template", InpMagicNumber)) return(INIT_FAILED);
+   // Deklarasikan Indikator Sekali Saja
+   g_h_bands = iBands(_Symbol, _Period, InpBBPeriod, 0, InpBBDev, PRICE_CLOSE);
    
-   // 2. Siapkan Indikator (Contoh: Bollinger Bands)
-   h_indicator = iBands(_Symbol, _Period, InpBB_Period, 0, InpBB_Dev, PRICE_CLOSE);
-   if(h_indicator == INVALID_HANDLE) return(INIT_FAILED);
+   // Konfigurasi Array biar index 0 itu candle terbaru
+   ArraySetAsSeries(g_buf_upper, true);
+   ArraySetAsSeries(g_buf_lower, true);
+   ArraySetAsSeries(g_buf_mid, true);
    
-   ArraySetAsSeries(g_buff_upper, true);
-   ArraySetAsSeries(g_buff_lower, true);
-   
+   Print("✅ [SYSTEM] Genetic Base Loaded | Magic: ", InpMagicNumber);
    return(INIT_SUCCEEDED);
-  }
+}
 
-//+------------------------------------------------------------------+
-//| Deinitialization Function                                        |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-  {
-   // Bersihkan memory mesin dan indikator
-   if(Kernel != NULL) delete Kernel;
-   IndicatorRelease(h_indicator);
-  }
+void OnDeinit()
+{
+   if(g_h_bands != INVALID_HANDLE) IndicatorRelease(g_h_bands);
+}
 
-//+------------------------------------------------------------------+
-//| Main Tick Loop                                                   |
-//+------------------------------------------------------------------+
+//+=================================================================+
+//| JANTUNG SISTEM (ON TICK)                                        |
+//+=================================================================+
 void OnTick()
-  {
-   // 1. Ambil data terbaru dari buffer indikator
-   CopyBuffer(h_indicator, 0, 0, 3, g_buff_lower);
-   CopyBuffer(h_indicator, 2, 0, 3, g_buff_upper);
+{
+   // 1. Keamanan: Stop jika ada posisi terbuka milik EA ini
+   if(PositionsTotal() > 0) return;
    
-   // 2. Jalankan Logika Trading
-   Kernel->Run(); 
-  }
+   // 2. Ambil Data Indikator dari Memory (Cepat & Ringan)
+   if(CopyBuffer(g_h_bands, 2, 0, 3, g_buf_upper) < 3) return; 
+   if(CopyBuffer(g_h_bands, 0, 0, 3, g_buf_lower) < 3) return; 
+   if(CopyBuffer(g_h_bands, 1, 0, 3, g_buf_mid)   < 3) return; 
+   
+   // --- BAGIAN EKSEKUSI SINYAL DARI TEMPLATE ---
+   CheckSignal();
+}
 
-//+------------------------------------------------------------------+
-// *** BAGIAN TERPENTING (TEMPAT OM MENULIS LOGIKA) ***
-// Override fungsi ini untuk setiap strategi baru!
-//+------------------------------------------------------------------+
-ENUM_SIGNAL CMarketKernel::GetTradingSignal()
-  {
-   // --- CONTOH LOGIKA (Bollinger Band Reversal) ---
-   // Gunakan variable g_buff_lower[1] dan g_buff_upper[1]
+//+=================================================================+
+//| AREA EDIT UTAMA — GANTI LOGIKA DI BAWAH INI                     |
+//+=================================================================+
+void CheckSignal()
+{
+   // Ambil data harga candle terakhir sebelum close
+   double low_prev  = iLow(_Symbol, PERIOD_CURRENT, 1);
+   double high_prev = iHigh(_Symbol, PERIOD_CURRENT, 1);
+   double close_prev= iClose(_Symbol, PERIOD_CURRENT, 1);
+   double close_2   = iClose(_Symbol, PERIOD_CURRENT, 2); // Candle sebelumnya lagi
    
-   double low_1  = iLow(_Symbol, PERIOD_CURRENT, 1);
-   double close_1= iClose(_Symbol, PERIOD_CURRENT, 1);
-   double close_2= iClose(_Symbol, PERIOD_CURRENT, 2);
+   double curr_lower= g_buf_lower[1];
+   double curr_upper= g_buf_upper[1];
    
-   // Logika BUY: Sentuh Lower Band lalu Close masuk kembali
-   if(low_1 <= g_buff_lower[1] && close_1 > g_buff_lower[1] && close_2 > g_buff_lower[2])
-      return SIG_BUY;
+   // Logika BUY CONTOH: Harga wick nyentuh Lower Band, close kembali di atasnya
+   bool buy_condition = (low_prev <= curr_lower && close_prev > curr_lower);
    
-   // Logika SELL: Sentuh Upper Band lalu Close masuk kembali
-   if(iHigh(_Symbol, PERIOD_CURRENT, 1) >= g_buff_upper[1] && close_1 < g_buff_upper[1] && close_2 < g_buff_upper[2])
-      return SIG_SELL;
-      
-   // Jika tidak ada sinyal apa-apa
-   return SIG_NONE; 
-  }
+   // Logika SELL CONTOH: Harga wick nyentuh Upper Band, close kembali di bawahnya
+   bool sell_condition= (high_prev >= curr_upper && close_prev < curr_upper);
+   
+   // Jika kondisi terpenuhi, kita hitung targetnya
+   if(buy_condition) {
+      double sl = 0, tp = 0;
+      CalculateTargets(ORDER_TYPE_BUY, sl, tp);
+      ExecutePreciseOrder(ORDER_TYPE_BUY, sl, tp, "BaseBuy");
+   }
+   
+   if(sell_condition) {
+      double sl = 0, tp = 0;
+      CalculateTargets(ORDER_TYPE_SELL, sl, tp);
+      ExecutePreciseOrder(ORDER_TYPE_SELL, sl, tp, "BaseSell");
+   }
+}
 
+//+=================================================================+
+//| FUNGSI PERHITUNGAN TARGET (SL/TP)                               |
+//+=================================================================+
+void CalculateTargets(ENUM_ORDER_TYPE type, double &sl_out, double &tp_out)
+{
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double pt  = _Point;
+   
+   // Contoh TP Dinamis: 70% lebar pita Bollinger Band
+   double bb_width = g_buf_upper[0] - g_buf_lower[0];
+   double profit_target = NormalizeDouble(bb_width * 0.7, _Digits);
+   
+   // Tentukan SL dan TP berdasarkan tipe order
+   if(type == ORDER_TYPE_BUY) {
+      sl_out = bid - (pt * 50); // Fallback default
+      tp_out = bid + profit_target;
+   } else {
+      sl_out = ask + (pt * 50); // Fallback default
+      tp_out = ask - profit_target;
+   }
+}
+
+//+=================================================================+
+//| FUNGSI EKSEKUSI FIX API                                         |
+//+=================================================================+
+void ExecutePreciseOrder(ENUM_ORDER_TYPE type, double sl, double tp, string comment)
+{
+   double price = (type == ORDER_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double pt    = _Point;
+   
+   // Validasi keamanan jarak SL minimal
+   double dist_sl = (type == ORDER_TYPE_BUY) ? NormalizeDouble((price - sl)/pt, 0) : NormalizeDouble((sl - price)/pt, 0);
+   if(dist_sl < 20) {
+      Print("⚠️ [WARNING] Jarak SL terlalu tipis (<20pt). Entry dibatalkan.");
+      return;
+   }
+   
+   // Eksekusi koordinat presisi (Strict/Fix API)
+   if(type == ORDER_TYPE_BUY) {
+      g_trade.PositionOpen(_Symbol, ORDER_TYPE_BUY, InpLot, price, sl, tp, comment);
+   } else {
+      g_trade.PositionOpen(_Symbol, ORDER_TYPE_SELL, InpLot, price, sl, tp, comment);
+   }
+}
 //+------------------------------------------------------------------+
