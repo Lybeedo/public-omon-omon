@@ -1,10 +1,11 @@
 //+------------------------------------------------------------------+
-//|                                                 Omon_Strategy.mq5 |
+//|                                              Omon_Strategy_V1.mq5 |
 //|                                Copyright 2024, Trader Nakal™ Team |
+//|                          Unified PA-BB with Structural SL & TP     |
 //+------------------------------------------------------------------+
 #property copyright "Trader Nakal™ — Omon Agent"
-#property version   "1.00"
-#include <Trade/Trade.mqh>
+#property version   "2.00"
+#include <Trade\Trade.mqh>
 #include <Arrays\ArrayDouble.mqh>
 
 input group      "=== Bollinger Bands Settings ==="
@@ -14,6 +15,12 @@ input double     InpMinWidth     = 0.02;       // Lebar pita minimum (%) untuk v
 
 input group      "=== Price Action Settings ==="
 input int        InpSwingPeriod  = 5;          // Candle sebelum/sesudah untuk cek Pivot
+
+input group      "=== Structural SL / TP Settings ==="
+input bool       InpUseStructuralSL = true;    // Gunakan SL/TP Dinamis Berdasarkan Struktur
+input int        InpLookbackPeriod  = 20;      // Jarak pencarian struktur terdekat
+input double     InpStructBuffer    = 0.001;   // Buffer ekstra (%) agar aman dari market wick
+input int        InpMinSLPoints     = 30;      // Minimal jarak SL (Poin) untuk validasi entry
 
 CTrade           trade;
 
@@ -45,7 +52,7 @@ void OnTick()
       case SIG_SELL:
          Print("🔴 SIGNAL SELL DETECTED: Struktur Turun + BB Breaking Down");
          break;
-      case SIG_NONE:
+      default:
          break; 
    }
    
@@ -57,7 +64,7 @@ ENUM_SIGNAL EvaluateConfluence()
   {
    // --- 1. Cek Struktur Pasar (PA) ---
    ENUM_TREND trend = GetTrendState(InpSwingPeriod);
-   if(trend == TREND_FLAT) return SIG_NONE; // Jangan trade saat flat
+   if(trend == TREND_FLAT) return SIG_NONE;
 
    // --- 2. Cek Bollinger Bands ---
    ENUM_BB_MODE bb_mode = GetBBMode();
@@ -67,13 +74,19 @@ ENUM_SIGNAL EvaluateConfluence()
    // --- 3. Logika KONFLUENSI (GABUNGAN) ---
    // BUY ONLY IF: Uptrend AND (Breakout Upper Band OR Walking Band Up)
    if(trend == TREND_BULL) {
-      if(bb_mode == BB_UP_BREAK || bb_mode == BB_WALKING_BAND) return SIG_BUY;
-      if(bb_mode == BB_RANGE && lower[0] > iClose(_Symbol, PERIOD_CURRENT, 0)) return SIG_NONE; // Still safe inside band
+      if(bb_mode == BB_UP_BREAK || bb_mode == BB_WALKING_BAND) {
+         if(InpUseStructuralSL) ExecuteStructuralTrade(SIG_BUY, TREND_BULL);
+         return SIG_BUY;
+      }
+      if(bb_mode == BB_RANGE && lower[0] > iClose(_Symbol, PERIOD_CURRENT, 0)) return SIG_NONE;
    }
    
    // SELL ONLY IF: Downtrend AND (Breakout Lower Band OR Walking Band Down)
    if(trend == TREND_BEAR) {
-      if(bb_mode == BB_DOWN_BREAK || bb_mode == BB_WALKING_BAND) return SIG_SELL;
+      if(bb_mode == BB_DOWN_BREAK || bb_mode == BB_WALKING_BAND) {
+         if(InpUseStructuralSL) ExecuteStructuralTrade(SIG_SELL, TREND_BEAR);
+         return SIG_SELL;
+      }
    }
 
    return SIG_NONE;
@@ -124,4 +137,91 @@ ENUM_TREND GetTrendState(int period)
    }
    return TREND_FLAT;
   }
+
+//+------------------------------------------------------------------+
+// Fungsi mencari level struktur terdekat (Swing High/Low)
+//+------------------------------------------------------------------+
+double GetNearestStructurePrice(ENUM_TREND trend, int lookback = 20)
+{
+   double highs[], lows[];
+   if(CopyHigh(_Symbol, PERIOD_CURRENT, 0, lookback, highs) <= 0) return 0;
+   if(CopyLow (_Symbol, PERIOD_CURRENT, 0, lookback, lows)  <= 0) return 0;
+   
+   ArraySetAsSeries(highs, false); // Urut waktu (lama ke baru)
+   ArraySetAsSeries(lows, false);
+   
+   if(trend == TREND_BULL) {
+      // Untuk UPTREND: SL diletakkan di bawah Swing Low terakhir
+      double avgLow = 0;
+      for(int i=0; i<5; i++) avgLow += lows[i]; 
+      avgLow /= 5;
+      return NormalizeDouble(avgLow - (avgLow * InpStructBuffer), _Digits);
+   }
+   else if(trend == TREND_BEAR) {
+      // Untuk DOWNTREND: SL diletakkan di atas Swing High terakhir
+      double avgHigh = 0;
+      for(int i=0; i<5; i++) avgHigh += highs[i];
+      avgHigh /= 5;
+      return NormalizeDouble(avgHigh + (avgHigh * InpStructBuffer), _Digits);
+   }
+   return 0;
+}
+
+//+------------------------------------------------------------------+
+// Fungsi menghitung TP Target berdasarkan Resistance/Selanjutnya
+//+------------------------------------------------------------------+
+double GetStructuralTargetPrice(ENUM_TREND trend, int target_index = 20)
+{
+   double highs[], lows[];
+   if(CopyHigh(_Symbol, PERIOD_CURRENT, 0, target_index, highs) <= 0) return 0;
+   if(CopyLow (_Symbol, PERIOD_CURRENT, 0, target_index, lows)  <= 0) return 0;
+   
+   ArraySetAsSeries(highs, false);
+   ArraySetAsSeries(lows, false);
+   
+   if(trend == TREND_BULL) {
+      // Target TP adalah resistance tertinggi berikutnya dalam jangkauan
+      double maxResistance = highs[target_index - 1]; 
+      return NormalizeDouble(maxResistance + (maxResistance * InpStructBuffer), _Digits);
+   }
+   else if(trend == TREND_BEAR) {
+      // Target TP adalah support terdalam berikutnya dalam jangkauan
+      double minSupport = lows[target_index - 1];
+      return NormalizeDouble(minSupport - (minSupport * InpStructBuffer), _Digits);
+   }
+   return 0;
+}
+
+//+------------------------------------------------------------------+
+// Fungsi Eksekusi Entry dengan Parameter Structure-Based SL & TP
+//+------------------------------------------------------------------+
+bool ExecuteStructuralTrade(ENUM_SIGNAL signal, ENUM_TREND trend)
+{
+   if(!InpUseStructuralSL) return false;
+   
+   double ask  = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   double bid  = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double sl   = GetNearestStructurePrice(trend, InpLookbackPeriod);
+   double tp   = GetStructuralTargetPrice(trend, InpLookbackPeriod);
+   string type_str = "";
+   
+   // Validasi Jarak Minimum (Anti-Slipage & Terlalu Tipis)
+   double dist_sl = (signal == SIG_BUY) ? (ask - sl) / Point() : (sl - bid) / Point();
+   if(dist_sl < InpMinSLPoints) { 
+      Print("⚠️ Struktur terlalu dekat. Skip entry.");
+      return false;
+   }
+   
+   // Tentukan Type Order
+   if(signal == SIG_BUY) {
+      type_str = "BUY";
+      return trade.Buy(0.01, _Symbol, ask, sl, tp, "PA-BB Structural Buy");
+   }
+   else if(signal == SIG_SELL) {
+      type_str = "SELL";
+      return trade.Sell(0.01, _Symbol, bid, sl, tp, "PA-BB Structural Sell");
+   }
+   
+   return false;
+}
 //+------------------------------------------------------------------+
