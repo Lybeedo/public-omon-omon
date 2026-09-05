@@ -4,7 +4,7 @@
 //|                          Bollinger Band Reversal / "Divergence" V |
 //+------------------------------------------------------------------+
 #property copyright "Trader Nakal™ — Omon Agent"
-#property version   "1.00"
+#property version   "1.01"
 #include <Trade\Trade.mqh>
 
 input group "=== Bollinger Bands Settings ==="
@@ -12,9 +12,10 @@ input int    InpBBPeriod     = 20;         // Periode Moving Average
 input double InpBBDeviation  = 2.0;        // Standard Deviations
 input int    InpBBShift      = 0;          // Shift
 
-input group "=== Execution Settings ==="
+input group "=== Execution & Take Profit ==="
 input bool   InpUseStructuralSL = true;    // Gunakan SL/TP Dinamis (Struktur)
 input double InpLots            = 0.01;    // Volume Eksekusi (Default 0.01 Cent)
+input double InpBbWidthRatio    = 0.7;     // % Lebar Pita untuk Target Profit (TP)
 
 CTrade       trade;
 
@@ -120,6 +121,11 @@ void ExecuteOrder(ENUM_ORDER_TYPE type)
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    double sl  = 0, tp = 0;
 
+   // Hitung Jarak TP Berbasis Lebar Pita (BB Width)
+   // Ini memastikan target profit selalu proporsional dengan volatilitas pasar
+   double bb_width = g_buff_upper[0] - g_buff_lower[0];
+   tp = NormalizeDouble(bb_width * InpBbWidthRatio, _Digits);
+
    // Hitung SL dinamis berdasarkan struktur jika diaktifkan
    if(InpUseStructuralSL)
      {
@@ -127,22 +133,43 @@ void ExecuteOrder(ENUM_ORDER_TYPE type)
         {
          // Cari swing low terdekat dari 10 candle terakhir
          int idx_low = iLowest(_Symbol, PERIOD_CURRENT, MODE_LOW, 10, 1);
-         sl = iLow(_Symbol, PERIOD_CURRENT, idx_low) - (iHigh(_Symbol, PERIOD_CURRENT, idx_low) * 0.0005); // Buffer tipis
+         sl = NormalizeDouble(iLow(_Symbol, PERIOD_CURRENT, idx_low) - (iHigh(_Symbol, PERIOD_CURRENT, idx_low) * 0.0005), _Digits);
+        
+         // Validasi: Jangan gunakan struktur jika jaraknya terlalu tipis (risk/reward buruk)
+         double dist_sl = (sl - bid) / Point();
+         if(dist_sl < 20) {
+            Print("⚠️ SL Structural terlalu tipis. Pakai default SL.");
+            sl = bid - (Point() * 50); // Default fallback 50 points
+         }
         }
       else
         {
          // Cari swing high terdekat dari 10 candle terakhir
          int idx_high = iHighest(_Symbol, PERIOD_CURRENT, MODE_HIGH, 10, 1);
-         sl = iHigh(_Symbol, PERIOD_CURRENT, idx_high) + (iHigh(_Symbol, PERIOD_CURRENT, idx_high) * 0.0005); // Buffer tipis
+         sl = NormalizeDouble(iHigh(_Symbol, PERIOD_CURRENT, idx_high) + (iHigh(_Symbol, PERIOD_CURRENT, idx_high) * 0.0005), _Digits);
+         
+         // Validasi: Jangan gunakan struktur jika jaraknya terlalu tipis
+         double dist_sl = (ask - sl) / Point();
+         if(dist_sl < 20) {
+            Print("⚠️ SL Structural terlalu tipis. Pakai default SL.");
+            sl = ask + (Point() * 50);
+         }
         }
      }
+   else {
+      // Jika SL struktural dimatikan, beri jarak aman default berdasarkan ATR kasar atau Fixed Points
+      sl = (type == ORDER_TYPE_BUY) ? bid - (Point() * 50) : ask + (Point() * 50);
+   }
 
+   // Tentukan Level TP Akhir
    if(type == ORDER_TYPE_BUY)
      {
+      tp = NormalizeDouble(bid + tp, _Digits);
       trade.Buy(InpLots, _Symbol, ask, sl, tp, "Art_BBPA Reversal Buy");
      }
    else
      {
+      tp = NormalizeDouble(ask - tp, _Digits);
       trade.Sell(InpLots, _Symbol, bid, sl, tp, "Art_BBPA Reversal Sell");
      }
 }
