@@ -1,10 +1,10 @@
 //+------------------------------------------------------------------+
-//|                                          Genetic_Base_Omon_Template.mq5 |
+//|                                               Art_Base_Template.mq5 |
 //|                                Copyright 2024, Trader Nakal™ Team   |
-//|                            TEMPLATE V1 — Silakan Duplikat & Edit    |
+//|                    Art Analyst Base Template — Use Only When Asked  |
 //+------------------------------------------------------------------+
 #property copyright "Trader Nakal™ — Omon Agent"
-#property version   "1.0"
+#property version   "1.01"
 #include <Trade\Trade.mqh>
 
 input group "=== Indikator Utama ==="
@@ -72,20 +72,24 @@ void OnTick()
 //+=================================================================+
 void CheckSignal()
 {
-   // Ambil data harga candle terakhir sebelum close
+   // Ambil data dari CANDLE YANG SUDAH CLOSE (bukan yang sedang forming)
+   // Index 1 = candle terakhir tertutup, Index 0 = candle yang sedang berjalan
    double low_prev  = iLow(_Symbol, PERIOD_CURRENT, 1);
    double high_prev = iHigh(_Symbol, PERIOD_CURRENT, 1);
    double close_prev= iClose(_Symbol, PERIOD_CURRENT, 1);
-   double close_2   = iClose(_Symbol, PERIOD_CURRENT, 2); // Candle sebelumnya lagi
+   double close_2   = iClose(_Symbol, PERIOD_CURRENT, 2);
    
+   // Data BB dari candle terakhir yang sudah close
    double curr_lower= g_buf_lower[1];
    double curr_upper= g_buf_upper[1];
    
-   // Logika BUY CONTOH: Harga wick nyentuh Lower Band, close kembali di atasnya
-   bool buy_condition = (low_prev <= curr_lower && close_prev > curr_lower);
+   // --- GANTI LOGIKA DI BAWAH INI SESUAI STRATEGI ANDA ---
    
-   // Logika SELL CONTOH: Harga wick nyentuh Upper Band, close kembali di bawahnya
-   bool sell_condition= (high_prev >= curr_upper && close_prev < curr_upper);
+   // Contoh BUY: Wick nyentuh lower band + Close kembali di atasnya
+   bool buy_condition  = (low_prev  <= curr_lower && close_prev > curr_lower);
+   
+   // Contoh SELL: Wick nyentuh upper band + Close kembali di bawahnya
+   bool sell_condition = (high_prev >= curr_upper && close_prev < curr_upper);
    
    // Jika kondisi terpenuhi, kita hitung targetnya
    if(buy_condition) {
