@@ -14,6 +14,7 @@ input double InpBBDev        = 2.0;        // Deviasi Standard
 input group "=== Manajemen Modal & Risk ==="
 input double InpLot          = 0.01;       // Volume Default (Cent)
 input int    InpDeviation    = 15;         // Deviasi Open Posisi (Poin)
+input string InpComment      = "ArtBase";   // Comment Order
 int      InpMagicNumber      = 8888;     // ID Unik EA — Hoki Primbon
 
 //+=================================================================+
