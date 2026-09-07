@@ -75,7 +75,35 @@ void OnTick()
    if(PositionsTotal() > 0) return;
    
    RefreshIndicator();
+   
+   // Verifikasi posisi berdasarkan Magic Number
+   VerifyPositions();
    CheckSignal();
+}
+
+//+=================================================================+
+//| VERIFIKASI POSISI (MAGIC NUMBER)                                  |
+//+=================================================================+
+void VerifyPositions()
+{
+   bool foundLong  = false;
+   bool foundShort = false;
+   
+   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+      if(PositionGetInteger(POSITION_MAGIC) != InpMagicNumber) continue;
+      
+      ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      
+      if(posType == POSITION_TYPE_BUY)  foundLong  = true;
+      if(posType == POSITION_TYPE_SELL) foundShort = true;
+   }
+   
+   g_hasLong  = foundLong;
+   g_hasShort = foundShort;
 }
 
 //+=================================================================+
