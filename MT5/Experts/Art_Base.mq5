@@ -15,6 +15,18 @@ input group "=== Manajemen Modal & Risk ==="
 input double InpLot          = 0.01;       // Volume Default (Cent)
 input int    InpDeviation    = 15;         // Deviasi Open Posisi (Poin)
 input string InpComment      = "ArtBase";   // Comment Order
+
+//+=================================================================+
+//| TIPE ARAH TRADE                                                 |
+//+=================================================================+
+enum ENUM_TRADE_DIR
+{
+   TRADE_ALL        = 0,   // Semua Arah
+   TRADE_BUY_ONLY   = 1,   // Buy Saja
+   TRADE_SELL_ONLY  = 2    // Sell Saja
+};
+
+input ENUM_TRADE_DIR InpTradeDir = TRADE_ALL; // Pilihan Arah Trade
 int      InpMagicNumber      = 8888;     // ID Unik EA — Hoki Primbon
 
 //+=================================================================+
@@ -107,13 +119,13 @@ void CheckSignal()
    double sl = 0.0;
    double tp = 0.0;
    
-   // Buka posisi LONG jika tidak ada posisi LONG dan IsLong() == true
-   if(!g_hasLong && IsLong()) {
+   // Buka posisi LONG jika mode mengizinkan dan IsLong() == true
+   if((InpTradeDir == TRADE_ALL || InpTradeDir == TRADE_BUY_ONLY) && !g_hasLong && IsLong()) {
       ExecutePosition(ORDER_TYPE_BUY, sl, tp);
    }
    
-   // Buka posisi SHORT jika tidak ada posisi SHORT dan IsShort() == true
-   if(!g_hasShort && IsShort()) {
+   // Buka posisi SHORT jika mode mengizinkan dan IsShort() == true
+   if((InpTradeDir == TRADE_ALL || InpTradeDir == TRADE_SELL_ONLY) && !g_hasShort && IsShort()) {
       ExecutePosition(ORDER_TYPE_SELL, sl, tp);
    }
 }
