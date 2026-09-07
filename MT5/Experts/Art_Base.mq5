@@ -65,15 +65,6 @@ void OnTick()
    if(curBarTime == lastBarTime) return;  // Candle sama → skip
    lastBarTime = curBarTime;             // Update tracker
    
-   // Reset flag saat semua posisi tertutup
-   if(PositionsTotal() == 0) {
-      g_hasLong  = false;
-      g_hasShort = false;
-   }
-   
-   // 1. Keamanan: Stop jika ada posisi terbuka milik EA ini
-   if(PositionsTotal() > 0) return;
-   
    RefreshIndicator();
    
    // Verifikasi posisi berdasarkan Magic Number
@@ -111,6 +102,9 @@ void VerifyPositions()
 //+=================================================================+
 void CheckSignal()
 {
+   // Stop jika sudah ada posisi LONG atau SHORT aktif
+   if(g_hasLong || g_hasShort) return;
+   
    // Ambil data dari CANDLE YANG SUDAH CLOSE (bukan yang sedang forming)
    // Index 1 = candle terakhir tertutup, Index 0 = candle yang sedang berjalan
    double low_prev  = iLow(_Symbol, PERIOD_CURRENT, 1);
