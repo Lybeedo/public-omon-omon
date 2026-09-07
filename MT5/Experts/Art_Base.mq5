@@ -108,12 +108,12 @@ void CheckSignal()
    
    // Buka posisi LONG jika tidak ada posisi LONG dan IsLong() == true
    if(!g_hasLong && IsLong()) {
-      ExecuteLongPosition(sl, tp);
+      ExecutePosition(ORDER_TYPE_BUY, sl, tp);
    }
    
    // Buka posisi SHORT jika tidak ada posisi SHORT dan IsShort() == true
    if(!g_hasShort && IsShort()) {
-      ExecuteShortPosition(sl, tp);
+      ExecutePosition(ORDER_TYPE_SELL, sl, tp);
    }
 }
 
@@ -140,31 +140,19 @@ bool IsLong()
 }
 
 //+=================================================================+
-//| EKSEKUSI POSISI LONG                                                |
+//| EKSEKUSI POSISI (UNIFIED)                                           |
 //+=================================================================+
-void ExecuteLongPosition(double &sl, double &tp)
+void ExecutePosition(ENUM_ORDER_TYPE type, double &sl, double &tp)
 {
    // Hitung SL dan TP
-   CalculateTargets(ORDER_TYPE_BUY, sl, tp);
+   CalculateTargets(type, sl, tp);
    
-   // Eksekusi posisi LONG dengan lot pada parameter
-   g_trade.PositionOpen(_Symbol, ORDER_TYPE_BUY, InpLot, 
-                        SymbolInfoDouble(_Symbol, SYMBOL_ASK), 
-                        sl, tp, "Long");
-}
-
-//+=================================================================+
-//| EKSEKUSI POSISI SHORT                                               |
-//+=================================================================+
-void ExecuteShortPosition(double &sl, double &tp)
-{
-   // Hitung SL dan TP
-   CalculateTargets(ORDER_TYPE_SELL, sl, tp);
+   // Tentukan harga entry berdasarkan tipe order
+   double entryPrice = (type == ORDER_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   string comment    = (type == ORDER_TYPE_BUY) ? "Long" : "Short";
    
-   // Eksekusi posisi SHORT dengan lot pada parameter
-   g_trade.PositionOpen(_Symbol, ORDER_TYPE_SELL, InpLot, 
-                        SymbolInfoDouble(_Symbol, SYMBOL_BID), 
-                        sl, tp, "Short");
+   // Eksekusi posisi dengan lot pada parameter
+   g_trade.PositionOpen(_Symbol, type, InpLot, entryPrice, sl, tp, comment);
 }
 
 //+=================================================================+
