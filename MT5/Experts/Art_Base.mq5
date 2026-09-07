@@ -32,7 +32,7 @@ input double         InpSL       = 0.0;        // Stop Loss   (0: Dynamic)
 
 input group "=== Market Metric ==="
 input int            InpEconometric    = 0;    // Eco-Metric (0: Disable)
-input ENUM_TIMEFRAME TFMetric          = PERIOD_CURRENT; // Metric Time
+input ENUM_TIMEFRAME InpTFMetric       = PERIOD_CURRENT; // Metric Time
 
 int                  InpMagicNumber    = 8888; // ID Unik EA — Hoki Primbon
 
@@ -66,8 +66,10 @@ int OnInit()
    
    // Setup Timer untuk Eco-Metric jika aktif
    if(InpEconometric > 0) {
-      EventSetTimer(InpEconometric);
-      Print("⏰ [TIMER] Eco-Metric active:", InpEconometric, "s interval");
+      int tf_seconds = (int)PeriodSeconds(InpTFMetric);
+      int interval   = tf_seconds * InpEconometric;
+      EventSetTimer(interval);
+      Print("⏰ [TIMER] Eco-Metric active | TF:", EnumToString(InpTFMetric), "| Interval:", interval, "s");
    }
 
    Print("✅ [SYSTEM] Genetic Base Loaded | Magic: ", InpMagicNumber);
@@ -87,10 +89,6 @@ void OnDeinit()
 //+=================================================================+
 void OnTimer()
 {
-   // Jalankan logika signal tanpa cek perubahan candle
-   if(!RefreshIndicator()) return;
-   VerifyPositions();
-   CheckSignal();
 }
 
 //+=================================================================+
