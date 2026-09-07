@@ -27,6 +27,8 @@ enum ENUM_TRADE_DIR
 };
 
 input ENUM_TRADE_DIR InpTradeDir = TRADE_ALL; // Pilihan Arah Trade
+input double         InpTP       = 0.0;        // Take Profit (0: Dynamic)
+input double         InpSL       = 0.0;        // Stop Loss   (0: Dynamic)
 int      InpMagicNumber      = 8888;     // ID Unik EA — Hoki Primbon
 
 //+=================================================================+
@@ -197,11 +199,13 @@ void CalculateTargets(ENUM_ORDER_TYPE type, double &sl_out, double &tp_out)
    
    // Tentukan SL dan TP berdasarkan tipe order
    if(type == ORDER_TYPE_BUY) {
-      sl_out = bid - (pt * 50); // Fallback default
-      tp_out = bid + profit_target;
+      // SL: manual jika > 0, otherwise dinamis
+      sl_out = (InpSL > 0) ? NormalizeDouble(bid - InpSL, _Digits) : bid - (pt * 50);
+      tp_out = (InpTP > 0) ? NormalizeDouble(bid + InpTP, _Digits) : bid + profit_target;
    } else {
-      sl_out = ask + (pt * 50); // Fallback default
-      tp_out = ask - profit_target;
+      // SL: manual jika > 0, otherwise dinamis
+      sl_out = (InpSL > 0) ? NormalizeDouble(ask + InpSL, _Digits) : ask + (pt * 50);
+      tp_out = (InpTP > 0) ? NormalizeDouble(ask - InpTP, _Digits) : ask - profit_target;
    }
 }
 
