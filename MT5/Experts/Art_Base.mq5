@@ -13,7 +13,7 @@ input double InpBBDev        = 2.0;        // Deviasi Standard
 
 input group "=== Manajemen Modal & Risk ==="
 input double InpLot          = 0.01;       // Volume Default (Cent)
-int      InpMagicNumber      = 998877;     // ID Unik EA
+int      InpMagicNumber      = 8888;     // ID Unik EA — Hoki Primbon
 
 //+=================================================================+
 //| VARIABEL GLOBAL ENGINE                                          |
