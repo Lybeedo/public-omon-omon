@@ -201,26 +201,5 @@ void CalculateTargets(ENUM_ORDER_TYPE type, double &sl_out, double &tp_out)
    }
 }
 
-//+=================================================================+
-//| FUNGSI EKSEKUSI FIX API                                         |
-//+=================================================================+
-void ExecutePreciseOrder(ENUM_ORDER_TYPE type, double sl, double tp, string comment)
-{
-   double price = (type == ORDER_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   double pt    = _Point;
-   
-   // Validasi keamanan jarak SL minimal
-   double dist_sl = (type == ORDER_TYPE_BUY) ? NormalizeDouble((price - sl)/pt, 0) : NormalizeDouble((sl - price)/pt, 0);
-   if(dist_sl < 20) {
-      Print("⚠️ [WARNING] Jarak SL terlalu tipis (<20pt). Entry dibatalkan.");
-      return;
-   }
-   
-   // Eksekusi koordinat presisi (Strict/Fix API)
-   if(type == ORDER_TYPE_BUY) {
-      g_trade.PositionOpen(_Symbol, ORDER_TYPE_BUY, InpLot, price, sl, tp, comment);
-   } else {
-      g_trade.PositionOpen(_Symbol, ORDER_TYPE_SELL, InpLot, price, sl, tp, comment);
-   }
-}
+
 //+------------------------------------------------------------------+
