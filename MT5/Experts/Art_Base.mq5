@@ -135,6 +135,8 @@ void CheckSignal()
 //+=================================================================+
 bool IsShort()
 {
+   if(InpTradeDir == TRADE_BUY_ONLY) return(false);
+   
    // Masukkan logika sell di sini
    bool signal = false;
    if(signal) g_hasShort = true;
