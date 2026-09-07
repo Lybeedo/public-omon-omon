@@ -150,10 +150,9 @@ void ExecutePosition(ENUM_ORDER_TYPE type, double &sl, double &tp)
    
    // Tentukan harga entry berdasarkan tipe order
    double entryPrice = (type == ORDER_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   string comment    = (type == ORDER_TYPE_BUY) ? "Long" : "Short";
    
    // Eksekusi posisi dengan lot pada parameter
-   g_trade.PositionOpen(_Symbol, type, InpLot, entryPrice, sl, tp, comment);
+   g_trade.PositionOpen(_Symbol, type, InpLot, entryPrice, sl, tp, InpComment);
 }
 
 //+=================================================================+
