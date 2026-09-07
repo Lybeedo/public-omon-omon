@@ -177,12 +177,28 @@ void ExecutePosition(ENUM_ORDER_TYPE type, double &sl, double &tp)
 //+=================================================================+
 //| REFRESH INDICATOR DATA                                             |
 //+=================================================================+
-void RefreshIndicator()
+bool RefreshIndicator()
 {
-   // Ambil data terbaru dari indikator
-   if(CopyBuffer(g_h_bands, 2, 0, 3, g_buf_upper) < 3) return; 
-   if(CopyBuffer(g_h_bands, 0, 0, 3, g_buf_lower) < 3) return; 
-   if(CopyBuffer(g_h_bands, 1, 0, 3, g_buf_mid)   < 3) return; 
+   ResetLastError();
+   
+   if(CopyBuffer(g_h_bands, 2, 0, 3, g_buf_upper) < 3) {
+      Print("⚠️ [WARNING] CopyBuffer UPPER failed:", GetLastError());
+      return(false);
+   }
+   
+   ResetLastError();
+   if(CopyBuffer(g_h_bands, 0, 0, 3, g_buf_lower) < 3) {
+      Print("⚠️ [WARNING] CopyBuffer LOWER failed:", GetLastError());
+      return(false);
+   }
+   
+   ResetLastError();
+   if(CopyBuffer(g_h_bands, 1, 0, 3, g_buf_mid) < 3) {
+      Print("⚠️ [WARNING] CopyBuffer MID failed:", GetLastError());
+      return(false);
+   }
+   
+   return(true);
 }
 
 //+=================================================================+
