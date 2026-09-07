@@ -29,7 +29,7 @@ enum ENUM_TRADE_DIR
 input ENUM_TRADE_DIR InpTradeDir = TRADE_ALL; // Pilihan Arah Trade
 input double         InpTP       = 0.0;        // Take Profit (0: Dynamic)
 input double         InpSL       = 0.0;        // Stop Loss   (0: Dynamic)
-input int            InpEconometric = 0;     // Economic Monitor (0: Disable)
+input int            InpEconometric = 0;     // Eco-Metric (0: Disable)
 int      InpMagicNumber      = 8888;     // ID Unik EA — Hoki Primbon
 
 //+=================================================================+
