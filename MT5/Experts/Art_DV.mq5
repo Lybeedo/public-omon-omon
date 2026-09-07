@@ -1,178 +1,213 @@
 //+------------------------------------------------------------------+
-//|                                                   Art_DV.mq5 |
-//|                                Copyright 2024, Trader Nakal™ Team |
-//|                          Bollinger Band Reversal / "Divergence" V |
-//|                      Optimized using CTrade::PositionOpen (Fix)  |
+//|                                               Art_Base_Template.mq5 |
+//|                                Copyright 2024, Trader Nakal™ Team   |
+//|                    Art Analyst Base Template — Use Only When Asked  |
 //+------------------------------------------------------------------+
 #property copyright "Trader Nakal™ — Omon Agent"
-#property version   "1.02"
+#property version   "1.01"
 #include <Trade\Trade.mqh>
 
-input group "=== Bollinger Bands Settings ==="
-input int    InpBBPeriod     = 20;         // Periode Moving Average
-input double InpBBDeviation  = 2.0;        // Standard Deviations
-input int    InpBBShift      = 0;          // Shift
+input group "=== Indikator Utama ==="
+input int    InpBBPeriod     = 20;         // Periode Bollinger Band
+input double InpBBDev        = 2.0;        // Deviasi Standard
 
-input group "=== Execution & Take Profit ==="
-input bool   InpUseStructuralSL = true;    // Gunakan SL/TP Dinamis (Struktur)
-input double InpLots            = 0.01;    // Volume Eksekusi (Default 0.01 Cent)
-input double InpBbWidthRatio    = 0.7;     // % Lebar Pita untuk Target Profit (TP)
+input group "=== Manajemen Modal & Risk ==="
+input double InpLot          = 0.01;       // Volume Default (Cent)
+input int    InpDeviation    = 15;         // Deviasi Open Posisi (Poin)
+input string InpComment      = "ArtBase";   // Comment Order
 
-CTrade       trade;
+//+=================================================================+
+//| TIPE ARAH TRADE                                                 |
+//+=================================================================+
+enum ENUM_TRADE_DIR
+{
+   TRADE_ALL        = 0,   // Semua Arah
+   TRADE_BUY_ONLY   = 1,   // Buy Saja
+   TRADE_SELL_ONLY  = 2    // Sell Saja
+};
 
-//+------------------------------------------------------------------+
-//| Variabel Global untuk Handle Indikator                           |
-//+------------------------------------------------------------------+
-int    g_bands_handle = INVALID_HANDLE;   // Handle untuk Bollinger Bands
-double g_buff_upper[];                    // Buffer Upper Band
-double g_buff_lower[];                    // Buffer Lower Band
-double g_buff_mid[];                      // Buffer Middle Band
-//+------------------------------------------------------------------+
+input ENUM_TRADE_DIR InpTradeDir = TRADE_ALL; // Pilihan Arah Trade
+input double         InpTP       = 0.0;        // Take Profit (0: Dynamic)
+input double         InpSL       = 0.0;        // Stop Loss   (0: Dynamic)
+int      InpMagicNumber      = 8888;     // ID Unik EA — Hoki Primbon
 
-//+------------------------------------------------------------------+
-//| Expert initialization function                                   |
-//+------------------------------------------------------------------+
+//+=================================================================+
+//| VARIABEL GLOBAL ENGINE                                          |
+//+=================================================================+
+CTrade       g_trade;                    // Objek eksekusi presisi
+int          g_h_bands;                  // Handle Indikator
+double       g_buf_upper[], g_buf_lower[], g_buf_mid[]; // Buffer Pita
+bool         g_hasLong  = false;   // Flag posisi LONG aktif
+bool         g_hasShort = false;   // Flag posisi SHORT aktif
+
+//+=================================================================+
+//| INITIALIZATION (JALAN SEKALI SAAT MULAI)                        |
+//+=================================================================+
 int OnInit()
-  {
-   // 1. Deklarasikan dan Inisialisasi Indikator Sekali Saja
-   g_bands_handle = iBands(_Symbol, _Period, InpBBPeriod, InpBBShift, InpBBDeviation, PRICE_CLOSE);
+{
+   // Setup Object Trade Presisi
+   g_trade.SetExpertMagicNumber(InpMagicNumber);
+   g_trade.SetTypeFilling(ORDER_FILLING_FOK); // Full Or Kill
+   g_trade.SetDeviationInPoints(InpDeviation);  // Toleransi slipage dari Deviasi Input
+   g_trade.SetAsyncMode(false);               // Pastikan blocking untuk debugging
    
-   if(g_bands_handle == INVALID_HANDLE)
-     {
-      PrintFormat("Gagal membuat indikator Bollinger Bands! Error code: %d", GetLastError());
-      return(INIT_FAILED);
-     }
+   // Deklarasikan Indikator Sekali Saja
+   g_h_bands = iBands(_Symbol, _Period, InpBBPeriod, 0, InpBBDev, PRICE_CLOSE);
    
-   // Atur properti agar array otomatis menjadi Time Series (candle terbaru di index 0)
-   ArraySetAsSeries(g_buff_upper, true);
-   ArraySetAsSeries(g_buff_lower, true);
-   ArraySetAsSeries(g_buff_mid, true);
-
-   // Setup Trade - Menggunakan Magic Number tetap
-   trade.SetExpertMagicNumber(998877);
-   trade.SetDeviationInPoints(50);     // Toleransi slipage 50 points (aman utk Cent)
-   trade.SetTypeFilling(ORDER_FILLING_FOK); // Fallback ke IOC jika FOK ditolak broker
+   // Konfigurasi Array biar index 0 itu candle terbaru
+   ArraySetAsSeries(g_buf_upper, true);
+   ArraySetAsSeries(g_buf_lower, true);
+   ArraySetAsSeries(g_buf_mid, true);
+   
+   Print("✅ [SYSTEM] Genetic Base Loaded | Magic: ", InpMagicNumber);
    return(INIT_SUCCEEDED);
-  }
+}
 
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-  {
-   // 2. Bebaskan memory saat EA dilepas
-   if(g_bands_handle != INVALID_HANDLE)
-      IndicatorRelease(g_bands_handle);
-  }
+void OnDeinit()
+{
+   if(g_h_bands != INVALID_HANDLE) IndicatorRelease(g_h_bands);
+}
 
-//+------------------------------------------------------------------+
-//| Expert tick function                                             |
-//+------------------------------------------------------------------+
+//+=================================================================+
+//| JANTUNG SISTEM (ON TICK)                                        |
+//+=================================================================+
 void OnTick()
-  {
-   // --- Cek Posisi Terbuka ---
-   if(PositionsTotal() > 0) return; // Hanya 1 posisi sekaligus
+{
+   // Hemat resource: jalankan hanya di candle baru
+   static datetime lastBarTime = 0;
+   datetime curBarTime = iTime(_Symbol, PERIOD_CURRENT, 0);
+   
+   if(curBarTime == lastBarTime) return;  // Candle sama → skip
+   lastBarTime = curBarTime;             // Update tracker
+   
+   RefreshIndicator();
+   
+   // Verifikasi posisi berdasarkan Magic Number
+   VerifyPositions();
+   CheckSignal();
+}
 
-   // --- Ambil Data Indikator yang sudah di-cache di Memory ---
-   if(CopyBuffer(g_bands_handle, 2, 0, 3, g_buff_upper) < 3) return; // Index 2 = Upper Band
-   if(CopyBuffer(g_bands_handle, 0, 0, 3, g_buff_lower) < 3) return; // Index 0 = Lower Band
-   if(CopyBuffer(g_bands_handle, 1, 0, 3, g_buff_mid)   < 3) return; // Index 1 = Middle Band
+//+=================================================================+
+//| VERIFIKASI POSISI (MAGIC NUMBER)                                  |
+//+=================================================================+
+void VerifyPositions()
+{
+   bool foundLong  = false;
+   bool foundShort = false;
+   
+   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+      if(PositionGetInteger(POSITION_MAGIC) != InpMagicNumber) continue;
+      
+      ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      
+      if(posType == POSITION_TYPE_BUY)  foundLong  = true;
+      if(posType == POSITION_TYPE_SELL) foundShort = true;
+   }
+   
+   g_hasLong  = foundLong;
+   g_hasShort = foundShort;
+}
 
-   // --- Logika BUY ---
-   double low_1   = iLow(_Symbol, PERIOD_CURRENT, 1);
-   double close_1 = iClose(_Symbol, PERIOD_CURRENT, 1);
-   double close_2 = iClose(_Symbol, PERIOD_CURRENT, 2);
-   double curr_lower_1 = g_buff_lower[1];
-   double curr_lower_2 = g_buff_lower[2];
+//+=================================================================+
+//| AREA EDIT UTAMA — GANTI LOGIKA DI BAWAH INI                     |
+//+=================================================================+
+void CheckSignal()
+{
+   // Variable SL dan TP
+   double sl = 0.0;
+   double tp = 0.0;
+   
+   // Buka posisi LONG jika mode mengizinkan dan IsLong() == true
+   if((InpTradeDir == TRADE_ALL || InpTradeDir == TRADE_BUY_ONLY) && !g_hasLong && IsLong()) {
+      ExecutePosition(ORDER_TYPE_BUY, sl, tp);
+   }
+   
+   // Buka posisi SHORT jika mode mengizinkan dan IsShort() == true
+   if((InpTradeDir == TRADE_ALL || InpTradeDir == TRADE_SELL_ONLY) && !g_hasShort && IsShort()) {
+      ExecutePosition(ORDER_TYPE_SELL, sl, tp);
+   }
+}
 
-   // Deteksi "Wick Touch" + "Valid Closure"
-   if(low_1 <= curr_lower_1 && close_1 > curr_lower_1 && close_2 > curr_lower_2)
-     {
-      Print("🟢 SIGNAL BUY: Lower Band Rejection Confirmed!");
-      ExecuteOrder(ORDER_TYPE_BUY);
-     }
+//+=================================================================+
+//| MODULE SHORT (SELL) — KOSONG                                      |
+//+=================================================================+
+bool IsShort()
+{
+   if(InpTradeDir == TRADE_BUY_ONLY) return(false);
+   
+   // Masukkan logika sell di sini
+   bool signal = false;
+   if(signal) g_hasShort = true;
+   return(signal);
+}
 
-   // --- Logika SELL ---
-   double high_1      = iHigh(_Symbol, PERIOD_CURRENT, 1);
-   double close_sell_1= iClose(_Symbol, PERIOD_CURRENT, 1);
-   double close_sell_2= iClose(_Symbol, PERIOD_CURRENT, 2);
-   double curr_upper_1= g_buff_upper[1];
-   double curr_upper_2= g_buff_upper[2];
+//+=================================================================+
+//| MODULE LONG (BUY) — KOSONG                                          |
+//+=================================================================+
+bool IsLong()
+{
+   if(InpTradeDir == TRADE_SELL_ONLY) return(false);
+   
+   // Masukkan logika buy di sini
+   bool signal = false;
+   if(signal) g_hasLong = true;
+   return(signal);
+}
 
-   if(high_1 >= curr_upper_1 && close_sell_1 < curr_upper_1 && close_sell_2 < curr_upper_2)
-     {
-      Print("🔴 SIGNAL SELL: Upper Band Rejection Confirmed!");
-      ExecuteOrder(ORDER_TYPE_SELL);
-     }
-  }
+//+=================================================================+
+//| EKSEKUSI POSISI (UNIFIED)                                           |
+//+=================================================================+
+void ExecutePosition(ENUM_ORDER_TYPE type, double &sl, double &tp)
+{
+   // Hitung SL dan TP
+   CalculateTargets(type, sl, tp);
+   
+   // Tentukan harga entry berdasarkan tipe order
+   double entryPrice = (type == ORDER_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   
+   // Eksekusi posisi dengan lot pada parameter
+   g_trade.PositionOpen(_Symbol, type, InpLot, entryPrice, sl, tp, InpComment);
+}
 
-//+------------------------------------------------------------------+
-//| Fungsi Eksekusi Order (Fix API - PositionOpen)                   |
-//+------------------------------------------------------------------+
-void ExecuteOrder(ENUM_ORDER_TYPE type)
+//+=================================================================+
+//| REFRESH INDICATOR DATA                                             |
+//+=================================================================+
+void RefreshIndicator()
+{
+   // Ambil data terbaru dari indikator
+   if(CopyBuffer(g_h_bands, 2, 0, 3, g_buf_upper) < 3) return; 
+   if(CopyBuffer(g_h_bands, 0, 0, 3, g_buf_lower) < 3) return; 
+   if(CopyBuffer(g_h_bands, 1, 0, 3, g_buf_mid)   < 3) return; 
+}
+
+//+=================================================================+
+//| FUNGSI PERHITUNGAN TARGET (SL/TP)                               |
+//+=================================================================+
+void CalculateTargets(ENUM_ORDER_TYPE type, double &sl_out, double &tp_out)
 {
    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   double sl  = 0, tp = 0;
-
-   // Hitung Jarak TP Berbasis Lebar Pita (BB Width)
-   double bb_width = g_buff_upper[0] - g_buff_lower[0];
-   double profit_distance = NormalizeDouble(bb_width * InpBbWidthRatio, _Digits);
-
-   // --- Hitung SL Dinamis berdasarkan Struktur ---
-   if(InpUseStructuralSL)
-     {
-      if(type == ORDER_TYPE_BUY)
-        {
-         // Cari swing low terdekat dari 10 candle terakhir
-         int idx_low = iLowest(_Symbol, PERIOD_CURRENT, MODE_LOW, 10, 1);
-         sl = NormalizeDouble(iLow(_Symbol, PERIOD_CURRENT, idx_low) - (iHigh(_Symbol, PERIOD_CURRENT, idx_low) * 0.0005), _Digits);
-        
-         // Validasi keamanan jarak SL
-         double dist_sl = (sl - bid) / Point();
-         if(dist_sl < 20) {
-            Print("⚠️ SL Structural terlalu tipis (<20pt). Pakai fixed fallback.");
-            sl = bid - (Point() * 50); 
-         }
-        }
-      else
-        {
-         // Cari swing high terdekat dari 10 candle terakhir
-         int idx_high = iHighest(_Symbol, PERIOD_CURRENT, MODE_HIGH, 10, 1);
-         sl = NormalizeDouble(iHigh(_Symbol, PERIOD_CURRENT, idx_high) + (iHigh(_Symbol, PERIOD_CURRENT, idx_high) * 0.0005), _Digits);
-         
-         double dist_sl = (ask - sl) / Point();
-         if(dist_sl < 20) {
-            Print("⚠️ SL Structural terlalu tipis (<20pt). Pakai fixed fallback.");
-            sl = ask + (Point() * 50);
-         }
-        }
-     }
-   else {
-      // Default SL jika fitur struktural dinonaktifkan
-      sl = (type == ORDER_TYPE_BUY) ? bid - (Point() * 50) : ask + (Point() * 50);
-   }
-
-   // --- Kalkulasi Koordinat TP Final ---
-   if(type == ORDER_TYPE_BUY)
-     {
-      tp = NormalizeDouble(bid + profit_distance, _Digits);
-      
-      // EKSEKUSI MEMAKAI FIX API (PositionOpen)
-      // Parameter: Symbol, Type, Volume, Price, SL, TP, Comment, Magic
-      trade.PositionOpen(_Symbol, ORDER_TYPE_BUY, InpLots, ask, sl, tp, "Art_BBPA Buy", 998877);
-     }
-   else
-     {
-      tp = NormalizeDouble(ask - profit_distance, _Digits);
-      
-      // EKSEKUSI MEMAKAI FIX API (PositionOpen)
-      trade.PositionOpen(_Symbol, ORDER_TYPE_SELL, InpLots, bid, sl, tp, "Art_BBPA Sell", 998877);
-     }
-     
-   // Cek hasil eksekusi
-   if(!trade.ResultOrder()) {
-      Print("❌ Gagal Entry! Retcode: ", trade.ResultRetcode(), " Descript: ", trade.ResultRetcodeDescription());
+   double pt  = _Point;
+   
+   // Variable dinamis default (optimal: set dulu, override kalau perlu)
+   double dynamicTarget = 50.0;
+   double dynamicStop   = 50.0;
+   
+   if(InpTP > 0) dynamicTarget = InpTP;
+   if(InpSL > 0) dynamicStop   = InpSL;
+   
+   if(type == ORDER_TYPE_BUY) {
+      sl_out = NormalizeDouble(bid - (pt * dynamicStop), _Digits);
+      tp_out = NormalizeDouble(bid + (pt * dynamicTarget), _Digits);
+   } else {
+      sl_out = NormalizeDouble(ask + (pt * dynamicStop), _Digits);
+      tp_out = NormalizeDouble(ask - (pt * dynamicTarget), _Digits);
    }
 }
+
+
 //+------------------------------------------------------------------+
