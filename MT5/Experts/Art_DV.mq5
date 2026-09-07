@@ -29,7 +29,10 @@ enum ENUM_TRADE_DIR
 input ENUM_TRADE_DIR InpTradeDir = TRADE_ALL; // Pilihan Arah Trade
 input double         InpTP       = 0.0;        // Take Profit (0: Dynamic)
 input double         InpSL       = 0.0;        // Stop Loss   (0: Dynamic)
-int      InpMagicNumber      = 8888;     // ID Unik EA — Hoki Primbon
+input int            InpEconometric    = 0;    // Eco-Metric (0: Disable)
+input ENUM_TIMEFRAME InpTFMetric       = PERIOD_CURRENT; // Metric Time
+
+int                  InpMagicNumber    = 8888; // ID Unik EA — Hoki Primbon
 
 //+=================================================================+
 //| VARIABEL GLOBAL ENGINE                                          |
@@ -59,6 +62,14 @@ int OnInit()
    ArraySetAsSeries(g_buf_lower, true);
    ArraySetAsSeries(g_buf_mid, true);
    
+   // Setup Timer untuk Eco-Metric jika aktif
+   if(InpEconometric > 0) {
+      int tf_seconds = (int)PeriodSeconds(InpTFMetric);
+      int interval   = tf_seconds * InpEconometric;
+      EventSetTimer(interval);
+      Print("⏰ [TIMER] Eco-Metric active | TF:", EnumToString(InpTFMetric), "| Interval:", interval, "s");
+   }
+
    Print("✅ [SYSTEM] Genetic Base Loaded | Magic: ", InpMagicNumber);
    return(INIT_SUCCEEDED);
 }
@@ -66,6 +77,16 @@ int OnInit()
 void OnDeinit()
 {
    if(g_h_bands != INVALID_HANDLE) IndicatorRelease(g_h_bands);
+   
+   // Matikan timer jika ada saat EA dihapus
+   if(InpEconometric > 0) EventKillTimer();
+}
+
+//+=================================================================+
+//| ON TIMER (ECO-METRIC WAKE UP)                                   |
+//+=================================================================+
+void OnTimer()
+{
 }
 
 //+=================================================================+
@@ -80,7 +101,7 @@ void OnTick()
    if(curBarTime == lastBarTime) return;  // Candle sama → skip
    lastBarTime = curBarTime;             // Update tracker
    
-   RefreshIndicator();
+   if(!RefreshIndicator()) return;       // Skip jika data indikator belum tersedia
    
    // Verifikasi posisi berdasarkan Magic Number
    VerifyPositions();
@@ -190,12 +211,29 @@ void ExecutePosition(ENUM_ORDER_TYPE type, double &sl, double &tp)
 //+=================================================================+
 //| REFRESH INDICATOR DATA                                             |
 //+=================================================================+
-void RefreshIndicator()
+bool RefreshIndicator()
 {
-   // Ambil data terbaru dari indikator
-   if(CopyBuffer(g_h_bands, 2, 0, 3, g_buf_upper) < 3) return; 
-   if(CopyBuffer(g_h_bands, 0, 0, 3, g_buf_lower) < 3) return; 
-   if(CopyBuffer(g_h_bands, 1, 0, 3, g_buf_mid)   < 3) return; 
+   ResetLastError();
+   // Standar iBands: Index 0=Mid, 1=Upper, 2=Lower
+   
+   if(CopyBuffer(g_h_bands, 1, 0, 3, g_buf_upper) < 3) {
+      Print("⚠️ [ERR] CopyBuffer UPPER failed:", GetLastError());
+      return(false);
+   }
+   
+   ResetLastError();
+   if(CopyBuffer(g_h_bands, 2, 0, 3, g_buf_lower) < 3) {
+      Print("⚠️ [ERR] CopyBuffer LOWER failed:", GetLastError());
+      return(false);
+   }
+   
+   ResetLastError();
+   if(CopyBuffer(g_h_bands, 0, 0, 3, g_buf_mid) < 3) {
+      Print("⚠️ [ERR] CopyBuffer MID failed:", GetLastError());
+      return(false);
+   }
+   
+   return(true);
 }
 
 //+=================================================================+
