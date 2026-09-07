@@ -193,26 +193,19 @@ void CalculateTargets(ENUM_ORDER_TYPE type, double &sl_out, double &tp_out)
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    double pt  = _Point;
    
-   // Variable dinamis default
-   double dynamicTarget = 0.0;
-   double dynamicStop   = 0.0;
+   // Variable dinamis default (optimal: set dulu, override kalau perlu)
+   double dynamicTarget = 50.0;
+   double dynamicStop   = 50.0;
+   
+   if(InpTP > 0) dynamicTarget = InpTP;
+   if(InpSL > 0) dynamicStop   = InpSL;
    
    if(type == ORDER_TYPE_BUY) {
-      dynamicStop   = (InpSL == 0) ? 50 : 0;
-      dynamicTarget = (InpTP == 0) ? 50 : 0;
-      
-      // SL: manual jika > 0, otherwise pakai dinamis
-      sl_out = (InpSL > 0) ? NormalizeDouble(bid - InpSL, _Digits) : bid - (pt * dynamicStop);
-      // TP: manual jika > 0, otherwise pakai dinamis
-      tp_out = (InpTP > 0) ? NormalizeDouble(bid + InpTP, _Digits) : bid + (pt * dynamicTarget);
+      sl_out = NormalizeDouble(bid - (pt * dynamicStop), _Digits);
+      tp_out = NormalizeDouble(bid + (pt * dynamicTarget), _Digits);
    } else {
-      dynamicStop   = (InpSL == 0) ? 50 : 0;
-      dynamicTarget = (InpTP == 0) ? 50 : 0;
-      
-      // SL: manual jika > 0, otherwise pakai dinamis
-      sl_out = (InpSL > 0) ? NormalizeDouble(ask + InpSL, _Digits) : ask + (pt * dynamicStop);
-      // TP: manual jika > 0, otherwise pakai dinamis
-      tp_out = (InpTP > 0) ? NormalizeDouble(ask - InpTP, _Digits) : ask - (pt * dynamicTarget);
+      sl_out = NormalizeDouble(ask + (pt * dynamicStop), _Digits);
+      tp_out = NormalizeDouble(ask - (pt * dynamicTarget), _Digits);
    }
 }
 
