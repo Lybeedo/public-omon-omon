@@ -7,6 +7,13 @@
 #property version   "1.01"
 #include <Trade\Trade.mqh>
 
+enum ENUM_TRADE_DIR
+{
+   TRADE_ALL        = 0,   // Semua Arah
+   TRADE_BUY_ONLY   = 1,   // Buy Saja
+   TRADE_SELL_ONLY  = 2    // Sell Saja
+};
+
 input group "=== Indikator Utama ==="
 input int    InpBBPeriod     = 20;         // Periode Bollinger Band
 input double InpBBDev        = 2.0;        // Deviasi Standard
@@ -15,16 +22,6 @@ input group "=== Manajemen Modal & Risk ==="
 input double InpLot          = 0.01;       // Volume Default (Cent)
 input int    InpDeviation    = 15;         // Deviasi Open Posisi (Poin)
 input string InpComment      = "ArtBase";   // Comment Order
-
-//+=================================================================+
-//| TIPE ARAH TRADE                                                 |
-//+=================================================================+
-enum ENUM_TRADE_DIR
-{
-   TRADE_ALL        = 0,   // Semua Arah
-   TRADE_BUY_ONLY   = 1,   // Buy Saja
-   TRADE_SELL_ONLY  = 2    // Sell Saja
-};
 
 input ENUM_TRADE_DIR InpTradeDir = TRADE_ALL; // Pilihan Arah Trade
 input double         InpTP       = 0.0;        // Take Profit (0: Dynamic)
