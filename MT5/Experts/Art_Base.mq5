@@ -193,19 +193,26 @@ void CalculateTargets(ENUM_ORDER_TYPE type, double &sl_out, double &tp_out)
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    double pt  = _Point;
    
-   // Contoh TP Dinamis: 70% lebar pita Bollinger Band
-   double bb_width = g_buf_upper[0] - g_buf_lower[0];
-   double profit_target = NormalizeDouble(bb_width * 0.7, _Digits);
+   // Variable dinamis default
+   double dynamicTarget = 0.0;
+   double dynamicStop   = 0.0;
    
-   // Tentukan SL dan TP berdasarkan tipe order
    if(type == ORDER_TYPE_BUY) {
-      // SL: manual jika > 0, otherwise dinamis
-      sl_out = (InpSL > 0) ? NormalizeDouble(bid - InpSL, _Digits) : bid - (pt * 50);
-      tp_out = (InpTP > 0) ? NormalizeDouble(bid + InpTP, _Digits) : bid + profit_target;
+      dynamicStop   = (InpSL == 0) ? 50 : 0;
+      dynamicTarget = (InpTP == 0) ? 50 : 0;
+      
+      // SL: manual jika > 0, otherwise pakai dinamis
+      sl_out = (InpSL > 0) ? NormalizeDouble(bid - InpSL, _Digits) : bid - (pt * dynamicStop);
+      // TP: manual jika > 0, otherwise pakai dinamis
+      tp_out = (InpTP > 0) ? NormalizeDouble(bid + InpTP, _Digits) : bid + (pt * dynamicTarget);
    } else {
-      // SL: manual jika > 0, otherwise dinamis
-      sl_out = (InpSL > 0) ? NormalizeDouble(ask + InpSL, _Digits) : ask + (pt * 50);
-      tp_out = (InpTP > 0) ? NormalizeDouble(ask - InpTP, _Digits) : ask - profit_target;
+      dynamicStop   = (InpSL == 0) ? 50 : 0;
+      dynamicTarget = (InpTP == 0) ? 50 : 0;
+      
+      // SL: manual jika > 0, otherwise pakai dinamis
+      sl_out = (InpSL > 0) ? NormalizeDouble(ask + InpSL, _Digits) : ask + (pt * dynamicStop);
+      // TP: manual jika > 0, otherwise pakai dinamis
+      tp_out = (InpTP > 0) ? NormalizeDouble(ask - InpTP, _Digits) : ask - (pt * dynamicTarget);
    }
 }
 
