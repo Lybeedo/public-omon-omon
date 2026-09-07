@@ -139,8 +139,15 @@ bool IsShort()
 {
    if(InpTradeDir == TRADE_BUY_ONLY) return(false);
    
-   // Masukkan logika sell di sini
-   bool signal = false;
+   // Ambil data candle
+   double close_prev  = iClose(_Symbol, PERIOD_CURRENT, 1);  // Candle-1 close
+   double high_2      = iHigh(_Symbol, PERIOD_CURRENT, 2);  // Candle-2 high
+   
+   // Ambil Upper Band dari buffer (index 2 = candle ke-2 yang sudah close)
+   double upper_2     = g_buf_upper[2];
+   
+   // Signal: Candle-2 sentuh/sentuh Upper Band, Candle-1 close di bawah Upper Band
+   bool signal = (high_2 >= upper_2) && (close_prev < upper_2);
    if(signal) g_hasShort = true;
    return(signal);
 }
