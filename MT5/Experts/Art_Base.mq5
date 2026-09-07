@@ -58,6 +58,13 @@ void OnDeinit()
 //+=================================================================+
 void OnTick()
 {
+   // Hemat resource: jalankan hanya di candle baru
+   static datetime lastBarTime = 0;
+   datetime curBarTime = iTime(_Symbol, PERIOD_CURRENT, 0);
+   
+   if(curBarTime == lastBarTime) return;  // Candle sama → skip
+   lastBarTime = curBarTime;             // Update tracker
+   
    // Reset flag saat semua posisi tertutup
    if(PositionsTotal() == 0) {
       g_hasLong  = false;
