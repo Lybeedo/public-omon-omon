@@ -58,12 +58,7 @@ void OnTick()
    // 1. Keamanan: Stop jika ada posisi terbuka milik EA ini
    if(PositionsTotal() > 0) return;
    
-   // 2. Ambil Data Indikator dari Memory (Cepat & Ringan)
-   if(CopyBuffer(g_h_bands, 2, 0, 3, g_buf_upper) < 3) return; 
-   if(CopyBuffer(g_h_bands, 0, 0, 3, g_buf_lower) < 3) return; 
-   if(CopyBuffer(g_h_bands, 1, 0, 3, g_buf_mid)   < 3) return; 
-   
-   // --- BAGIAN EKSEKUSI SINYAL DARI TEMPLATE ---
+   RefreshIndicator();
    CheckSignal();
 }
 
@@ -116,6 +111,17 @@ bool IsLong()
 {
    // Masukkan logika buy di sini
    return(false);
+}
+
+//+=================================================================+
+//| REFRESH INDICATOR DATA                                             |
+//+=================================================================+
+void RefreshIndicator()
+{
+   // Ambil data terbaru dari indikator
+   if(CopyBuffer(g_h_bands, 2, 0, 3, g_buf_upper) < 3) return; 
+   if(CopyBuffer(g_h_bands, 0, 0, 3, g_buf_lower) < 3) return; 
+   if(CopyBuffer(g_h_bands, 1, 0, 3, g_buf_mid)   < 3) return; 
 }
 
 //+=================================================================+
