@@ -159,8 +159,15 @@ bool IsLong()
 {
    if(InpTradeDir == TRADE_SELL_ONLY) return(false);
    
-   // Masukkan logika buy di sini
-   bool signal = false;
+   // Ambil data candle
+   double close_prev  = iClose(_Symbol, PERIOD_CURRENT, 1);  // Candle-1 close
+   double low_2       = iLow(_Symbol, PERIOD_CURRENT, 2);   // Candle-2 low
+   
+   // Ambil Lower Band dari buffer (index 2 = candle ke-2 yang sudah close)
+   double lower_2     = g_buf_lower[2];
+   
+   // Signal: Candle-2 sentuh Lower Band, Candle-1 close di atas Lower Band
+   bool signal = (low_2 <= lower_2) && (close_prev > lower_2);
    if(signal) g_hasLong = true;
    return(signal);
 }
