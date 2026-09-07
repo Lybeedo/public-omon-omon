@@ -29,8 +29,12 @@ enum ENUM_TRADE_DIR
 input ENUM_TRADE_DIR InpTradeDir = TRADE_ALL; // Pilihan Arah Trade
 input double         InpTP       = 0.0;        // Take Profit (0: Dynamic)
 input double         InpSL       = 0.0;        // Stop Loss   (0: Dynamic)
-input int            InpEconometric = 0;     // Eco-Metric (0: Disable)
-int      InpMagicNumber      = 8888;     // ID Unik EA — Hoki Primbon
+
+input group "=== Market Metric ==="
+input int            InpEconometric    = 0;    // Eco-Metric (0: Disable)
+input ENUM_TIMEFRAME TFMetric          = PERIOD_CURRENT; // Metric Time
+
+int                  InpMagicNumber    = 8888; // ID Unik EA — Hoki Primbon
 
 //+=================================================================+
 //| VARIABEL GLOBAL ENGINE                                          |
@@ -60,6 +64,12 @@ int OnInit()
    ArraySetAsSeries(g_buf_lower, true);
    ArraySetAsSeries(g_buf_mid, true);
    
+   // Setup Timer untuk Eco-Metric jika aktif
+   if(InpEconometric > 0) {
+      EventSetTimer(InpEconometric);
+      Print("⏰ [TIMER] Eco-Metric active:", InpEconometric, "s interval");
+   }
+
    Print("✅ [SYSTEM] Genetic Base Loaded | Magic: ", InpMagicNumber);
    return(INIT_SUCCEEDED);
 }
@@ -67,6 +77,20 @@ int OnInit()
 void OnDeinit()
 {
    if(g_h_bands != INVALID_HANDLE) IndicatorRelease(g_h_bands);
+   
+   // Matikan timer jika ada saat EA dihapus
+   if(InpEconometric > 0) EventKillTimer();
+}
+
+//+=================================================================+
+//| ON TIMER (ECO-METRIC WAKE UP)                                   |
+//+=================================================================+
+void OnTimer()
+{
+   // Jalankan logika signal tanpa cek perubahan candle
+   if(!RefreshIndicator()) return;
+   VerifyPositions();
+   CheckSignal();
 }
 
 //+=================================================================+
