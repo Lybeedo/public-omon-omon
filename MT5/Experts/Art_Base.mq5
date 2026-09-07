@@ -21,6 +21,8 @@ int      InpMagicNumber      = 998877;     // ID Unik EA
 CTrade       g_trade;                    // Objek eksekusi presisi
 int          g_h_bands;                  // Handle Indikator
 double       g_buf_upper[], g_buf_lower[], g_buf_mid[]; // Buffer Pita
+bool         g_hasLong  = false;   // Flag posisi LONG aktif
+bool         g_hasShort = false;   // Flag posisi SHORT aktif
 
 //+=================================================================+
 //| INITIALIZATION (JALAN SEKALI SAAT MULAI)                        |
@@ -55,6 +57,12 @@ void OnDeinit()
 //+=================================================================+
 void OnTick()
 {
+   // Reset flag saat semua posisi tertutup
+   if(PositionsTotal() == 0) {
+      g_hasLong  = false;
+      g_hasShort = false;
+   }
+   
    // 1. Keamanan: Stop jika ada posisi terbuka milik EA ini
    if(PositionsTotal() > 0) return;
    
@@ -101,7 +109,9 @@ void CheckSignal()
 bool IsShort()
 {
    // Masukkan logika sell di sini
-   return(false);
+   bool signal = false;
+   if(signal) g_hasShort = true;
+   return(signal);
 }
 
 //+=================================================================+
@@ -110,7 +120,9 @@ bool IsShort()
 bool IsLong()
 {
    // Masukkan logika buy di sini
-   return(false);
+   bool signal = false;
+   if(signal) g_hasLong = true;
+   return(signal);
 }
 
 //+=================================================================+
