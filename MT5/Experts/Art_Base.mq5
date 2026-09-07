@@ -148,6 +148,8 @@ bool IsShort()
 //+=================================================================+
 bool IsLong()
 {
+   if(InpTradeDir == TRADE_SELL_ONLY) return(false);
+   
    // Masukkan logika buy di sini
    bool signal = false;
    if(signal) g_hasLong = true;
