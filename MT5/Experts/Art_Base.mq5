@@ -13,6 +13,7 @@ input double InpBBDev        = 2.0;        // Deviasi Standard
 
 input group "=== Manajemen Modal & Risk ==="
 input double InpLot          = 0.01;       // Volume Default (Cent)
+input int    InpDeviation    = 15;         // Deviasi Open Posisi (Poin)
 int      InpMagicNumber      = 8888;     // ID Unik EA — Hoki Primbon
 
 //+=================================================================+
@@ -32,7 +33,7 @@ int OnInit()
    // Setup Object Trade Presisi
    g_trade.SetExpertMagicNumber(InpMagicNumber);
    g_trade.SetTypeFilling(ORDER_FILLING_FOK); // Full Or Kill
-   g_trade.SetDeviationInPoints(30);          // Toleransi slipage
+   g_trade.SetDeviationInPoints(InpDeviation);  // Toleransi slipage dari Deviasi Input
    g_trade.SetAsyncMode(false);               // Pastikan blocking untuk debugging
    
    // Deklarasikan Indikator Sekali Saja
