@@ -110,6 +110,11 @@ void CheckSignal()
    if(!g_hasLong && IsLong()) {
       ExecuteLongPosition(sl, tp);
    }
+   
+   // Buka posisi SHORT jika tidak ada posisi SHORT dan IsShort() == true
+   if(!g_hasShort && IsShort()) {
+      ExecuteShortPosition(sl, tp);
+   }
 }
 
 //+=================================================================+
@@ -146,6 +151,20 @@ void ExecuteLongPosition(double &sl, double &tp)
    g_trade.PositionOpen(_Symbol, ORDER_TYPE_BUY, InpLot, 
                         SymbolInfoDouble(_Symbol, SYMBOL_ASK), 
                         sl, tp, "Long");
+}
+
+//+=================================================================+
+//| EKSEKUSI POSISI SHORT                                               |
+//+=================================================================+
+void ExecuteShortPosition(double &sl, double &tp)
+{
+   // Hitung SL dan TP
+   CalculateTargets(ORDER_TYPE_SELL, sl, tp);
+   
+   // Eksekusi posisi SHORT dengan lot pada parameter
+   g_trade.PositionOpen(_Symbol, ORDER_TYPE_SELL, InpLot, 
+                        SymbolInfoDouble(_Symbol, SYMBOL_BID), 
+                        sl, tp, "Short");
 }
 
 //+=================================================================+
