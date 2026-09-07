@@ -24,7 +24,7 @@ input group "=== Indikator Utama ==="
 input int    InpBBPeriod     = 20;         // Periode Bollinger Band
 input double InpBBDev        = 2.0;        // Deviasi Standard
 
-input group "=== Manajemen Modal & Risk ==="
+input group "=== M&R Management ==="
 input double InpLot          = 0.01;       // Volume Default (Cent)
 
 input double         InpTP       = 0.0;        // Take Profit (0: Dynamic)
