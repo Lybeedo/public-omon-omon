@@ -83,26 +83,39 @@ void CheckSignal()
    double curr_lower= g_buf_lower[1];
    double curr_upper= g_buf_upper[1];
    
-   // --- GANTI LOGIKA DI BAWAH INI SESUAI STRATEGI ANDA ---
+   // --- MODULE TINGKAT TINGGI (LOGIC TRADING) ---
+   bool short_setup = IsShort();
+   bool long_setup  = IsLong();
    
-   // Contoh BUY: Wick nyentuh lower band + Close kembali di atasnya
-   bool buy_condition  = (low_prev  <= curr_lower && close_prev > curr_lower);
-   
-   // Contoh SELL: Wick nyentuh upper band + Close kembali di bawahnya
-   bool sell_condition = (high_prev >= curr_upper && close_prev < curr_upper);
-   
-   // Jika kondisi terpenuhi, kita hitung targetnya
-   if(buy_condition) {
-      double sl = 0, tp = 0;
-      CalculateTargets(ORDER_TYPE_BUY, sl, tp);
-      ExecutePreciseOrder(ORDER_TYPE_BUY, sl, tp, "BaseBuy");
-   }
-   
-   if(sell_condition) {
+   if(short_setup) {
       double sl = 0, tp = 0;
       CalculateTargets(ORDER_TYPE_SELL, sl, tp);
-      ExecutePreciseOrder(ORDER_TYPE_SELL, sl, tp, "BaseSell");
+      ExecutePreciseOrder(ORDER_TYPE_SELL, sl, tp, "Short");
    }
+   
+   else if(long_setup) {
+      double sl = 0, tp = 0;
+      CalculateTargets(ORDER_TYPE_BUY, sl, tp);
+      ExecutePreciseOrder(ORDER_TYPE_BUY, sl, tp, "Long");
+   }
+}
+
+//+=================================================================+
+//| MODULE SHORT (SELL) — KOSONG                                      |
+//+=================================================================+
+bool IsShort()
+{
+   // Masukkan logika sell di sini
+   return(false);
+}
+
+//+=================================================================+
+//| MODULE LONG (BUY) — KOSONG                                         |
+//+=================================================================+
+bool IsLong()
+{
+   // Masukkan logika buy di sini
+   return(false);
 }
 
 //+=================================================================+
