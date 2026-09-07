@@ -14,24 +14,25 @@ enum ENUM_TRADE_DIR
    TRADE_SELL_ONLY  = 2    // Sell Saja
 };
 
+input group "=== General Settings ==="
+input ENUM_TRADE_DIR InpTradeDir = TRADE_ALL; // Pilihan Arah Trade
+input int    InpDeviation    = 15;         // Deviasi Open Posisi (Poin)
+input string InpComment      = "ArtBase";   // Comment Order
+input int    InpMagicNumber    = 8888;     // ID Unik EA — Hoki Primbon
+
 input group "=== Indikator Utama ==="
 input int    InpBBPeriod     = 20;         // Periode Bollinger Band
 input double InpBBDev        = 2.0;        // Deviasi Standard
 
 input group "=== Manajemen Modal & Risk ==="
 input double InpLot          = 0.01;       // Volume Default (Cent)
-input int    InpDeviation    = 15;         // Deviasi Open Posisi (Poin)
-input string InpComment      = "ArtBase";   // Comment Order
 
-input ENUM_TRADE_DIR InpTradeDir = TRADE_ALL; // Pilihan Arah Trade
 input double         InpTP       = 0.0;        // Take Profit (0: Dynamic)
 input double         InpSL       = 0.0;        // Stop Loss   (0: Dynamic)
 
 input group "=== Market Metric ==="
 input int            InpEconometric    = 0;    // Eco-Metric (0: Disable)
 input ENUM_TIMEFRAME InpTFMetric       = PERIOD_CURRENT; // Metric Time
-
-int                  InpMagicNumber    = 8888; // ID Unik EA — Hoki Primbon
 
 //+=================================================================+
 //| VARIABEL GLOBAL ENGINE                                          |
