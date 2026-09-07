@@ -102,34 +102,13 @@ void VerifyPositions()
 //+=================================================================+
 void CheckSignal()
 {
-   // Stop jika sudah ada posisi LONG atau SHORT aktif
-   if(g_hasLong || g_hasShort) return;
+   // Variable SL dan TP
+   double sl = 0.0;
+   double tp = 0.0;
    
-   // Ambil data dari CANDLE YANG SUDAH CLOSE (bukan yang sedang forming)
-   // Index 1 = candle terakhir tertutup, Index 0 = candle yang sedang berjalan
-   double low_prev  = iLow(_Symbol, PERIOD_CURRENT, 1);
-   double high_prev = iHigh(_Symbol, PERIOD_CURRENT, 1);
-   double close_prev= iClose(_Symbol, PERIOD_CURRENT, 1);
-   double close_2   = iClose(_Symbol, PERIOD_CURRENT, 2);
-   
-   // Data BB dari candle terakhir yang sudah close
-   double curr_lower= g_buf_lower[1];
-   double curr_upper= g_buf_upper[1];
-   
-   // --- MODULE TINGKAT TINGGI (LOGIC TRADING) ---
-   bool short_setup = IsShort();
-   bool long_setup  = IsLong();
-   
-   if(short_setup) {
-      double sl = 0, tp = 0;
-      CalculateTargets(ORDER_TYPE_SELL, sl, tp);
-      ExecutePreciseOrder(ORDER_TYPE_SELL, sl, tp, "Short");
-   }
-   
-   else if(long_setup) {
-      double sl = 0, tp = 0;
-      CalculateTargets(ORDER_TYPE_BUY, sl, tp);
-      ExecutePreciseOrder(ORDER_TYPE_BUY, sl, tp, "Long");
+   // Buka posisi LONG jika tidak ada posisi LONG dan IsLong() == true
+   if(!g_hasLong && IsLong()) {
+      ExecuteLongPosition(sl, tp);
    }
 }
 
@@ -145,7 +124,7 @@ bool IsShort()
 }
 
 //+=================================================================+
-//| MODULE LONG (BUY) — KOSONG                                         |
+//| MODULE LONG (BUY) — KOSONG                                          |
 //+=================================================================+
 bool IsLong()
 {
@@ -153,6 +132,20 @@ bool IsLong()
    bool signal = false;
    if(signal) g_hasLong = true;
    return(signal);
+}
+
+//+=================================================================+
+//| EKSEKUSI POSISI LONG                                                |
+//+=================================================================+
+void ExecuteLongPosition(double &sl, double &tp)
+{
+   // Hitung SL dan TP
+   CalculateTargets(ORDER_TYPE_BUY, sl, tp);
+   
+   // Eksekusi posisi LONG dengan lot pada parameter
+   g_trade.PositionOpen(_Symbol, ORDER_TYPE_BUY, InpLot, 
+                        SymbolInfoDouble(_Symbol, SYMBOL_ASK), 
+                        sl, tp, "Long");
 }
 
 //+=================================================================+
