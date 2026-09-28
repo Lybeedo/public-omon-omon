@@ -24,7 +24,7 @@ input group "=== Indikator Utama ==="
 input int    InpBBPeriod     = 20;         // Periode Bollinger Band
 input double InpBBDev        = 2.0;        // Deviasi Standard
 
-input group "=== Manajemen Modal & Risk ==="
+input group "=== M&R Management ==="
 input double InpLot          = 0.01;       // Volume Default (Cent)
 
 input double         InpTP       = 0.0;        // Take Profit (0: Dynamic)
@@ -101,7 +101,7 @@ void OnTick()
    if(curBarTime == lastBarTime) return;  // Candle sama → skip
    lastBarTime = curBarTime;             // Update tracker
    
-   RefreshIndicator();
+   if(!RefreshIndicator()) return;       // Skip jika data indikator belum tersedia
    
    // Verifikasi posisi berdasarkan Magic Number
    VerifyPositions();
@@ -160,8 +160,15 @@ bool IsShort()
 {
    if(InpTradeDir == TRADE_BUY_ONLY) return(false);
    
-   // Masukkan logika sell di sini
-   bool signal = false;
+   // Ambil data candle
+   double close_prev  = iClose(_Symbol, PERIOD_CURRENT, 1);  // Candle-1 close
+   double high_2      = iHigh(_Symbol, PERIOD_CURRENT, 2);  // Candle-2 high
+   
+   // Ambil Upper Band dari buffer (index 2 = candle ke-2 yang sudah close)
+   double upper_2     = g_buf_upper[2];
+   
+   // Signal: Candle-2 sentuh/sentuh Upper Band, Candle-1 close di bawah Upper Band
+   bool signal = (high_2 >= upper_2) && (close_prev < upper_2);
    if(signal) g_hasShort = true;
    return(signal);
 }
@@ -173,8 +180,15 @@ bool IsLong()
 {
    if(InpTradeDir == TRADE_SELL_ONLY) return(false);
    
-   // Masukkan logika buy di sini
-   bool signal = false;
+   // Ambil data candle
+   double close_prev  = iClose(_Symbol, PERIOD_CURRENT, 1);  // Candle-1 close
+   double low_2       = iLow(_Symbol, PERIOD_CURRENT, 2);   // Candle-2 low
+   
+   // Ambil Lower Band dari buffer (index 2 = candle ke-2 yang sudah close)
+   double lower_2     = g_buf_lower[2];
+   
+   // Signal: Candle-2 sentuh Lower Band, Candle-1 close di atas Lower Band
+   bool signal = (low_2 <= lower_2) && (close_prev > lower_2);
    if(signal) g_hasLong = true;
    return(signal);
 }
@@ -200,21 +214,22 @@ void ExecutePosition(ENUM_ORDER_TYPE type, double &sl, double &tp)
 bool RefreshIndicator()
 {
    ResetLastError();
+   // Standar iBands: Index 0=Mid, 1=Upper, 2=Lower
    
-   if(CopyBuffer(g_h_bands, 2, 0, 3, g_buf_upper) < 3) {
-      Print("⚠️ [WARNING] CopyBuffer UPPER failed:", GetLastError());
+   if(CopyBuffer(g_h_bands, 1, 0, 3, g_buf_upper) < 3) {
+      Print("⚠️ [ERR] CopyBuffer UPPER failed:", GetLastError());
       return(false);
    }
    
    ResetLastError();
-   if(CopyBuffer(g_h_bands, 0, 0, 3, g_buf_lower) < 3) {
-      Print("⚠️ [WARNING] CopyBuffer LOWER failed:", GetLastError());
+   if(CopyBuffer(g_h_bands, 2, 0, 3, g_buf_lower) < 3) {
+      Print("⚠️ [ERR] CopyBuffer LOWER failed:", GetLastError());
       return(false);
    }
    
    ResetLastError();
-   if(CopyBuffer(g_h_bands, 1, 0, 3, g_buf_mid) < 3) {
-      Print("⚠️ [WARNING] CopyBuffer MID failed:", GetLastError());
+   if(CopyBuffer(g_h_bands, 0, 0, 3, g_buf_mid) < 3) {
+      Print("⚠️ [ERR] CopyBuffer MID failed:", GetLastError());
       return(false);
    }
    
