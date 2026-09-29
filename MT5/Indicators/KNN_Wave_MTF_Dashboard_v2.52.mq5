@@ -81,7 +81,7 @@
 //|      akan reset & memori dibangun ulang otomatis)                |
 //+------------------------------------------------------------------+
 #property copyright   "KNN Wave MTF Dashboard"
-#property version     "2.51"
+#property version     "2.52"
 #property description "Dashboard probabilitas Bullish/Bearish berbasis KNN (M5, M15, H1, H4, D1)"
 #property strict
 #property indicator_chart_window
@@ -1625,13 +1625,13 @@ class CKNN_Engine
                                                                                         ObjectSetInteger(0, name, OBJPROP_ZORDER, 1);
                                                                                         ObjectSetString(0, name, OBJPROP_FONT, "Consolas");
                                                                                     }
-   //--- anchor sesuai corner
-                                                                                    ENUM_ANCHOR_POINT anc = ANCHOR_LEFT_UPPER;
-                                                                                    if(g_corner == CORNER_RIGHT_UPPER) anc = ANCHOR_LEFT_UPPER;
-                                                                                    if(g_corner == CORNER_LEFT_UPPER) anc = ANCHOR_LEFT_UPPER;
-                                                                                    if(g_corner == CORNER_RIGHT_LOWER) anc = ANCHOR_LEFT_LOWER;
-                                                                                    if(g_corner == CORNER_LEFT_LOWER) anc = ANCHOR_LEFT_LOWER;
-                                                                                    ObjectSetInteger(0, name, OBJPROP_ANCHOR, anc);
+   //--- anchor sesuai corner (teks melebar ke dalam panel)
+   ENUM_ANCHOR_POINT anc = ANCHOR_LEFT_UPPER;
+   if(g_corner == CORNER_LEFT_UPPER) anc = ANCHOR_LEFT_UPPER;
+   else if(g_corner == CORNER_RIGHT_UPPER) anc = ANCHOR_RIGHT_UPPER;
+   else if(g_corner == CORNER_LEFT_LOWER) anc = ANCHOR_LEFT_LOWER;
+   else if(g_corner == CORNER_RIGHT_LOWER) anc = ANCHOR_RIGHT_LOWER;
+   ObjectSetInteger(0, name, OBJPROP_ANCHOR, anc);
                                                                                     ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
                                                                                     ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
                                                                                     ObjectSetInteger(0, name, OBJPROP_FONTSIZE, fsize);
@@ -1645,8 +1645,8 @@ class CKNN_Engine
 //+------------------------------------------------------------------+
                                                                                 void DrawDashboard()
                                                                                 {
-   //--- ukuran panel
-                                                                                    const int panelW = 545;
+   //--- ukuran panel (diperlebar supaya blok REKOMENDASI ENTRY tidak terpotong)
+                                                                                    const int panelW = 720;
                                                                                     const int margin = 10;
                                                                                     const int rowH = 22;
                                                                                     const int y0 = 15;
@@ -1657,9 +1657,7 @@ class CKNN_Engine
                                                                                     const int yf = yRecStart + TF_COUNT * recRowH + 10;      // footer, di bawah blok rekomendasi
                                                                                     const int panelH = (yf + 50) - y0;
 
-   //--- apakah corner kiri atau kanan
-                                                                                    bool isLeft = (g_corner == CORNER_LEFT_UPPER || g_corner == CORNER_LEFT_LOWER);
-                                                                                    bool isLower = (g_corner == CORNER_RIGHT_LOWER || g_corner == CORNER_LEFT_LOWER);
+   //--- panel anchor & ukuran diatur di SetLabel()/CreateRect(); posisi Y bawah diatur saat init
 
    //--- posisi kolom (offset dari tepi kiri panel)
    //    kolom: TF, Trend F4, Bull%, Bear%, Match, Signal, Hit%(n), Acc%
@@ -1667,20 +1665,16 @@ class CKNN_Engine
                                                                                     co[0] = 10; co[1] = 55; co[2] = 160; co[3] = 220;
                                                                                     co[4] = 280; co[5] = 335; co[6] = 395; co[7] = 490;
 
-   //--- konversi ke koordinat X absolut sesuai corner
-   //    Untuk CORNER_RIGHT_*: X = jarak dari tepi kanan = panelW + margin - co[]
-   //    Untuk CORNER_LEFT_*:  X = jarak dari tepi kiri  = margin + co[]
+   //--- koordinat X: jarak dari tepi panel terdekat (kiri untuk corner kiri, kanan untuk corner kanan)
+   //    Anchor label diset di SetLabel() agar teks melebar ke dalam panel, bukan keluar.
                                                                                     int xs[8];
                                                                                     for(int q = 0; q < 8; q++)
                                                                                     {
-                                                                                        if(isLeft)
                                                                                         xs[q] = margin + co[q];
-                                                                                        else
-                                                                                        xs[q] = panelW + margin - co[q];
                                                                                     }
 
    //--- posisi X untuk title dan footer
-                                                                                    int xTitle = isLeft ? (margin + co[0]) : (panelW + margin - co[0]);
+                                                                                    int xTitle = margin + co[0];
                                                                                     int xFooter = xTitle;
 
    //--- posisi X dan Y untuk background rectangle
