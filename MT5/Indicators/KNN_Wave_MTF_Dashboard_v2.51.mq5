@@ -248,11 +248,6 @@ class CKNN_Engine
     double m_max_spread_pips;
     double m_max_avg_dist;
 
-    // v2.51: smoothing buffers for regime features
-    double m_smoothER[3];
-    double m_smoothHurst[3];
-    int    m_smoothIdx;
-
     // statistik tetangga terakhir & walk-forward
     int m_k_bull_count, m_k_bear_count;
     double m_wf_pnl, m_wf_avg_rr, m_wf_expectancy;
@@ -576,9 +571,13 @@ class CKNN_Engine
         mae_atr = worst / atr;
     }
 
-   //--- KNN inti: scan memori index [from..to], Top-K terurut, voting berbobot jarak
-    bool QueryKNN(const double &f[], const int from, const int to,
-    double &bull_pct, double &avg_dist)
+   //--- KNN inti: scan memori index [from..to], Top-K terurut, voting Gaussian kernel
+   //--- useRaw=false -> pakai m_memory yang sudah ternormalisasi (live/current)
+   //--- useRaw=true  -> normalisasi m_raw on-the-fly dengan min/max eksternal (OOS walk-forward)
+    bool QueryKNNCore(const double &f[], const int from, const int to,
+                      const double &w[], const bool useRaw,
+                      const double &min[], const double &max[],
+                      double &bull_pct, double &avg_dist)
     {
         int K = m_k_neighbors;
         if(to < from || (to - from + 1) < K) return false;
@@ -590,10 +589,24 @@ class CKNN_Engine
             double d = 0.0;
             for(int j = 0; j < FEATURE_COUNT; j++)
             {
-                double diff = f[j] - m_memory[i].features[j];
-                d += m_feat_weight[j] * diff * diff;
+                double vj;
+                if(useRaw)
+                {
+                    double range_j = max[j] - min[j];
+                    vj = (range_j <= 1e-12) ? 0.5 : (m_raw[i].features[j] - min[j]) / range_j;
+                }
+                else
+                {
+                    vj = m_memory[i].features[j];
+                }
+                double diff = f[j] - vj;
+                d += w[j] * diff * diff;
             }
             d = MathSqrt(d);
+
+            int tgt = useRaw ? m_raw[i].target : m_memory[i].target;
+            double mv = useRaw ? m_raw[i].move_atr : m_memory[i].move_atr;
+            double mae = useRaw ? m_raw[i].mae_atr : m_memory[i].mae_atr;
 
             int pos = 0;
             if(filled < K)
@@ -602,11 +615,11 @@ class CKNN_Engine
                 filled++;
             }
             else if(d < m_best[K - 1].dist)
-            pos = K - 1;
+                pos = K - 1;
             else
-            continue;
+                continue;
 
-            while(pos > 0 && m_best[pos - 1].dist > d) // insertion: selalu terurut kecil - > besar
+            while(pos > 0 && m_best[pos - 1].dist > d) // insertion: terurut kecil -> besar
             {
                 m_best[pos].dist = m_best[pos - 1].dist;
                 m_best[pos].target = m_best[pos - 1].target;
@@ -615,9 +628,9 @@ class CKNN_Engine
                 pos--;
             }
             m_best[pos].dist = d;
-            m_best[pos].target = m_memory[i].target;
-            m_best[pos].move_atr = m_memory[i].move_atr;
-            m_best[pos].mae_atr = m_memory[i].mae_atr;
+            m_best[pos].target = tgt;
+            m_best[pos].move_atr = mv;
+            m_best[pos].mae_atr = mae;
         }
 
         if(filled < K) return false;
@@ -635,21 +648,21 @@ class CKNN_Engine
         for(int i = 0; i < K; i++)
         {
             double d = m_best[i].dist;
-            double w = (twoSigma2 > 0.0) ? MathExp(-(d * d) / twoSigma2) : 1.0;
-            wTot += w;
+            double weight = (twoSigma2 > 0.0) ? MathExp(-(d * d) / twoSigma2) : 1.0;
+            wTot += weight;
             if(m_best[i].target == 1)
             {
-                wBull += w;
-                wClassBull += w;
-                wMoveBull += w * m_best[i].move_atr;
-                wMaeBull += w * m_best[i].mae_atr;
+                wBull += weight;
+                wClassBull += weight;
+                wMoveBull += weight * m_best[i].move_atr;
+                wMaeBull += weight * m_best[i].mae_atr;
                 nBull++;
             }
             else
             {
-                wClassBear += w;
-                wMoveBear += w * m_best[i].move_atr;
-                wMaeBear += w * m_best[i].mae_atr;
+                wClassBear += weight;
+                wMoveBear += weight * m_best[i].move_atr;
+                wMaeBear += weight * m_best[i].mae_atr;
                 nBear++;
             }
         }
@@ -669,99 +682,17 @@ class CKNN_Engine
         return true;
     }
 
-   //--- KNN dengan normalisasi/bobot beku (walk-forward, tidak lookahead)
     bool QueryKNN(const double &f[], const int from, const int to,
-    double &bull_pct, double &avg_dist,
-    const double &min[], const double &max[], const double &w[])
+                  double &bull_pct, double &avg_dist)
     {
-        int K = m_k_neighbors;
-        if(to < from || (to - from + 1) < K) return false;
-        if(ArraySize(m_best) < K) ArrayResize(m_best, K);
+        return QueryKNNCore(f, from, to, m_feat_weight, false, m_min, m_max, bull_pct, avg_dist);
+    }
 
-        int filled = 0;
-        for(int i = from; i <= to; i++)
-        {
-            double d = 0.0;
-            for(int j = 0; j < FEATURE_COUNT; j++)
-            {
-                double range_i = max[j] - min[j];
-                double vi = (range_i <= 1e-12) ? 0.5 : (m_raw[i].features[j] - min[j]) / range_i;
-                double diff = f[j] - vi;
-                d += w[j] * diff * diff;
-            }
-            d = MathSqrt(d);
-
-            int pos = 0;
-            if(filled < K)
-            {
-                pos = filled;
-                filled++;
-            }
-            else if(d < m_best[K - 1].dist)
-            pos = K - 1;
-            else
-            continue;
-
-            while(pos > 0 && m_best[pos - 1].dist > d)
-            {
-                m_best[pos].dist = m_best[pos - 1].dist;
-                m_best[pos].target = m_best[pos - 1].target;
-                m_best[pos].move_atr = m_best[pos - 1].move_atr;
-                m_best[pos].mae_atr = m_best[pos - 1].mae_atr;
-                pos--;
-            }
-            m_best[pos].dist = d;
-            m_best[pos].target = m_raw[i].target;
-            m_best[pos].move_atr = m_raw[i].move_atr;
-            m_best[pos].mae_atr = m_raw[i].mae_atr;
-        }
-
-        if(filled < K) return false;
-
-        double sumD = 0.0;
-        for(int i = 0; i < K; i++) sumD += m_best[i].dist;
-        avg_dist = sumD / (double)K;
-        double sigma = MathMax(avg_dist, WEIGHT_EPS);
-        double twoSigma2 = 2.0 * sigma * sigma;
-
-        double wBull = 0.0, wTot = 0.0;
-        double wMoveBull = 0.0, wMoveBear = 0.0, wMaeBull = 0.0, wMaeBear = 0.0;
-        double wClassBull = 0.0, wClassBear = 0.0;
-        int nBull = 0, nBear = 0;
-        for(int i = 0; i < K; i++)
-        {
-            double d = m_best[i].dist;
-            double ww = (twoSigma2 > 0.0) ? MathExp(-(d * d) / twoSigma2) : 1.0;
-            wTot += ww;
-            if(m_best[i].target == 1)
-            {
-                wBull += ww;
-                wClassBull += ww;
-                wMoveBull += ww * m_best[i].move_atr;
-                wMaeBull += ww * m_best[i].mae_atr;
-                nBull++;
-            }
-            else
-            {
-                wClassBear += ww;
-                wMoveBear += ww * m_best[i].move_atr;
-                wMaeBear += ww * m_best[i].mae_atr;
-                nBear++;
-            }
-        }
-        if(wTot <= 0.0) return false;
-        bull_pct = 100.0 * wBull / wTot;
-
-        m_k_bull_count = nBull;
-        m_k_bear_count = nBear;
-
-        m_avgMoveBull = (wClassBull > 0.0) ? (wMoveBull / wClassBull) : 0.0;
-        m_avgMoveBear = (wClassBear > 0.0) ? (wMoveBear / wClassBear) : 0.0;
-        m_avgMaeBull  = (wClassBull > 0.0) ? (wMaeBull / wClassBull) : 0.0;
-        m_avgMaeBear  = (wClassBear > 0.0) ? (wMaeBear / wClassBear) : 0.0;
-        m_haveMoveBull = (wClassBull > 0.0);
-        m_haveMoveBear = (wClassBear > 0.0);
-        return true;
+    bool QueryKNN(const double &f[], const int from, const int to,
+                  double &bull_pct, double &avg_dist,
+                  const double &min[], const double &max[], const double &w[])
+    {
+        return QueryKNNCore(f, from, to, w, true, min, max, bull_pct, avg_dist);
     }
 
    //--- persentase referensi historis yang jaraknya >= ad (100 = sangat mirip, 0 = pola asing)
@@ -1248,8 +1179,6 @@ class CKNN_Engine
         m_er_period = 20; m_hurst_window = 64;
         m_min_match = 20.0; m_max_spread_pips = 50.0; m_max_avg_dist = 0.0;
         m_k_bull_count = 0; m_k_bear_count = 0;
-        m_smoothIdx = 0;
-        for(int j = 0; j < 3; j++) { m_smoothER[j] = 0.5; m_smoothHurst[j] = 0.5; }
         m_wf_pnl = 0.0; m_wf_avg_rr = 0.0; m_wf_expectancy = 0.0; m_wf_trade_count = 0;
         }
         ~CKNN_Engine() { ReleaseHandles(); }
@@ -1307,7 +1236,7 @@ class CKNN_Engine
    //--- F6: Efficiency Ratio (Kaufman) - rasio perpindahan bersih terhadap total jarak tempuh,
    //--- analog efisiensi mekanik (displacement/path-length). 1.0 = trend efisien/lurus,
    //--- mendekati 0 = choppy/ranging (banyak bolak-balik untuk perpindahan bersih yang kecil).
-   //--- v2.51: period and optional 3-bar median smoothing to reduce noise on small TFs.
+   //--- v2.51: period TF-dependent; smoothing dilakukan oleh median 3-shift di ExtractFeatures().
             double ComputeEfficiencyRatio(const int shift, const int period)
             {
                 int p = MathMax(2, MathMin(period, 200));
@@ -1320,13 +1249,7 @@ class CKNN_Engine
                 double er = netChange / pathSum;
                 if(er > 1.0) er = 1.0;
                 if(er < 0.0) er = 0.0;
-
-                if(!InpSmoothRegime) return er;
-                int idx = m_smoothIdx % 3;
-                m_smoothER[idx] = er;
-                m_smoothIdx++;
-                double a = m_smoothER[0], b = m_smoothER[1], c = m_smoothER[2];
-                return Median3(a, b, c);
+                return er;
             }
 
    //--- Rescaled-Range (R/S) untuk window sepanjang 'n' bar mulai dari 'shift' (mundur ke masa lalu).
@@ -1452,12 +1375,18 @@ class CKNN_Engine
                 f[4] = b_macd[shift] - b_macd[shift + 2];
 
       // F6: Efficiency Ratio (regime: trending vs choppy/ranging), window m_er_period bar
-                f[5] = Median3(ComputeEfficiencyRatio(shift, m_er_period),
-                               ComputeEfficiencyRatio(shift + 1, m_er_period),
-                               ComputeEfficiencyRatio(shift + 2, m_er_period));
+                if(InpSmoothRegime)
+                    f[5] = Median3(ComputeEfficiencyRatio(shift, m_er_period),
+                                   ComputeEfficiencyRatio(shift + 1, m_er_period),
+                                   ComputeEfficiencyRatio(shift + 2, m_er_period));
+                else
+                    f[5] = ComputeEfficiencyRatio(shift, m_er_period);
 
       // F7: Hurst Exponent (regime: persisten/trending vs mean-reverting), window m_hurst_window bar
-                f[6] = Median3(ComputeHurst(shift), ComputeHurst(shift + 1), ComputeHurst(shift + 2));
+                if(InpSmoothRegime)
+                    f[6] = Median3(ComputeHurst(shift), ComputeHurst(shift + 1), ComputeHurst(shift + 2));
+                else
+                    f[6] = ComputeHurst(shift);
 
       // F8: Wave Leg Ratio (hubungan Fibonacci antar-leg fractal berurutan)
                 f[7] = ComputeWaveLegRatio(shift);
